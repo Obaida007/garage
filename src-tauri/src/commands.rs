@@ -8,7 +8,7 @@ use crate::models::{
 use crate::printing;
 use crate::state::AppState;
 use std::path::PathBuf;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
 
 fn emit_update(app: &AppHandle) -> AppResult<GarageSnapshot> {

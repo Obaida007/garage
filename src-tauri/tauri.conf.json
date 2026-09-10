@@ -38,12 +38,6 @@
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
-      },
-      "nsis": {
-        "installerIcon": "icons/icon.ico",
-        "displayLanguageSelector": false,
-        "installMode": "both",
-        "shortcutName": "Al-Sahil Garage"
       }
     },
     "shortDescription": "نظام إدارة أدوار كراج الساحل",
@@ -51,10 +45,5 @@
     "publisher": "Al-Sahil Garage",
     "category": "Business",
     "copyright": "Al-Sahil Garage"
-  },
-  "plugins": {
-    "autostart": {
-      "windows": true
-    }
   }
 }
