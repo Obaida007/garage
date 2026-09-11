@@ -98,6 +98,8 @@ pub struct AppSettings {
     /// When true, tickets are auto-assigned to ready bays immediately.
     /// When false, the cashier must manually call each ticket.
     pub auto_assign: bool,
+    /// The date (YYYY-MM-DD) when the sequence was last reset to 1.
+    pub last_reset_date: String,
 }
 
 impl Default for AppSettings {
@@ -113,6 +115,7 @@ impl Default for AppSettings {
             waiting_fullscreen: true,
             last_called_ticket_id: None,
             auto_assign: true,
+            last_reset_date: String::new(),
         }
     }
 }

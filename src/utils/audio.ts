@@ -62,8 +62,12 @@ export function speakTicketCall(ticketNumber: string, bayId: number | string) {
   // Cancel any ongoing speech
   window.speechSynthesis.cancel();
 
-  // Format text exactly as requested: "الزبون رقم [رقم الزبون] إلى الحفرة [رقم الحفرة]"
-  const text = `الزبون رقم ${ticketNumber} إلى الحفرة ${bayId}`;
+  // Convert ticket number to integer so TTS reads it as a whole number (e.g. "071" → 71 → "واحد وسبعون")
+  const ticketNumeric = parseInt(ticketNumber, 10);
+  const ticketSpoken = isNaN(ticketNumeric) ? ticketNumber : ticketNumeric;
+
+  // Format text: "الزبون رقم [رقم الزبون] إلى الحفرة [رقم الحفرة]"
+  const text = `الزبون رقم ${ticketSpoken} إلى الحفرة ${bayId}`;
 
   // Delay speech slightly to let chime play cleanly
   setTimeout(() => {

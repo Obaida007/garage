@@ -116,7 +116,16 @@ fn map_ticket(row: &rusqlite::Row<'_>) -> rusqlite::Result<Ticket> {
 
 pub fn create_ticket(conn: &mut Connection) -> AppResult<Ticket> {
     let tx = conn.transaction()?;
-    let settings = db::load_settings(&tx)?;
+    let mut settings = db::load_settings(&tx)?;
+
+    // Daily reset: if today is a new day, reset the sequence back to 1
+    let today_str = today();
+    if settings.last_reset_date != today_str {
+        settings.next_sequence = 1;
+        db::set_setting(&tx, "next_sequence", "1")?;
+        db::set_setting(&tx, "last_reset_date", &today_str)?;
+    }
+
     let mut sequence = settings.next_sequence.max(1);
 
     loop {
@@ -156,6 +165,7 @@ pub fn create_ticket(conn: &mut Connection) -> AppResult<Ticket> {
         }
     }
 }
+
 
 pub fn create_ticket_and_maybe_print<F>(
     conn: &mut Connection,

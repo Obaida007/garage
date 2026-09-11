@@ -110,6 +110,7 @@ fn seed_settings(conn: &Connection) -> AppResult<()> {
     set_if_missing(conn, "waiting_fullscreen", "true")?;
     set_if_missing(conn, "last_called_ticket_id", "")?;
     set_if_missing(conn, "auto_assign", "true")?;
+    set_if_missing(conn, "last_reset_date", "")?;
     Ok(())
 }
 
@@ -176,6 +177,9 @@ pub fn load_settings(conn: &Connection) -> AppResult<AppSettings> {
     }
     if let Some(v) = get_setting(conn, "auto_assign")? {
         settings.auto_assign = v == "true" || v == "1";
+    }
+    if let Some(v) = get_setting(conn, "last_reset_date")? {
+        settings.last_reset_date = v;
     }
     Ok(settings)
 }
