@@ -89,7 +89,7 @@ fn show_waiting_on(app: &AppHandle, monitor: &MonitorInfo, fullscreen: bool) -> 
         existing
     } else {
         WebviewWindowBuilder::new(app, WAITING_LABEL, waiting_url())
-            .title("Al-Sahil Waiting")
+            .title("كراج البارودي - شاشة الانتظار")
             .decorations(false)
             .skip_taskbar(true)
             .visible(true)

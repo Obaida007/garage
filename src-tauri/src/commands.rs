@@ -3,7 +3,7 @@ use crate::display;
 use crate::error::AppResult;
 use crate::garage;
 use crate::models::{
-    AppSettings, CreateTicketResult, DailyReport, GarageSnapshot, MonitorInfo, PrinterInfo, Ticket,
+    AppSettings, Bay, CreateTicketResult, DailyReport, GarageSnapshot, MonitorInfo, PrinterInfo, Ticket,
 };
 use crate::printing;
 use crate::state::AppState;
@@ -98,6 +98,17 @@ pub fn assign_ticket(app: AppHandle, ticket_id: i64, bay_id: i64) -> AppResult<T
     };
     let _ = emit_update(&app);
     Ok(ticket)
+}
+
+#[tauri::command]
+pub fn set_bay_out_of_service(app: AppHandle, bay_id: i64, out_of_service: bool) -> AppResult<Bay> {
+    let bay = {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock();
+        garage::set_bay_out_of_service(&conn, bay_id, out_of_service)?
+    };
+    let _ = emit_update(&app);
+    Ok(bay)
 }
 
 #[tauri::command]

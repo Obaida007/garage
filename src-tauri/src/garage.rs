@@ -164,8 +164,18 @@ pub fn create_ticket_and_maybe_print<F>(
 where
     F: FnOnce(&Ticket, &AppSettings) -> Result<(), String>,
 {
-    let ticket = create_ticket(conn)?;
+    let mut ticket = create_ticket(conn)?;
+
+    // If auto-assign is enabled and there is an available ready bay, assign ticket immediately!
     let settings = db::load_settings(conn)?;
+    if settings.auto_assign {
+        if let Ok(Some(ready_bay_id)) = first_ready_bay(conn) {
+            if let Ok(assigned) = assign_ticket_to_bay(conn, ticket.id, ready_bay_id) {
+                ticket = assigned;
+            }
+        }
+    }
+
     let print_error = printer(&ticket, &settings).err();
     Ok(CreateTicketResult {
         ticket,
@@ -181,6 +191,47 @@ pub fn first_ready_bay(conn: &Connection) -> AppResult<Option<i64>> {
     )
     .optional()
     .map_err(AppError::from)
+}
+
+pub fn set_bay_out_of_service(conn: &Connection, bay_id: i64, out_of_service: bool) -> AppResult<Bay> {
+    let (current_ticket_id, _status): (Option<i64>, String) = conn.query_row(
+        "SELECT current_ticket_id, status FROM bays WHERE id = ?1",
+        params![bay_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+
+    if out_of_service {
+        if current_ticket_id.is_some() {
+            return Err(AppError::msg("لا يمكن وضع الحفرة خارج الخدمة وهي مشغولة بدور حالياً. أنهِ الدور أولاً."));
+        }
+        conn.execute(
+            "UPDATE bays SET status = 'OUT_OF_SERVICE' WHERE id = ?1",
+            params![bay_id],
+        )?;
+    } else {
+        conn.execute(
+            "UPDATE bays SET status = 'READY' WHERE id = ?1",
+            params![bay_id],
+        )?;
+
+        // If reactivated and there are waiting tickets, auto-assign next ticket if auto_assign is enabled
+        let settings = db::load_settings(conn)?;
+        if settings.auto_assign {
+            let next_waiting_id: Option<i64> = conn
+                .query_row(
+                    "SELECT id FROM tickets WHERE status = 'WAITING' ORDER BY sequence ASC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if let Some(t_id) = next_waiting_id {
+                let _ = assign_ticket_to_bay(conn, t_id, bay_id);
+            }
+        }
+    }
+
+    let bays = list_bays(conn)?;
+    bays.into_iter().find(|b| b.id == bay_id).ok_or_else(|| AppError::msg("الحفرة غير موجودة"))
 }
 
 pub fn assign_ticket_to_bay(conn: &Connection, ticket_id: i64, bay_id: i64) -> AppResult<Ticket> {
@@ -200,7 +251,7 @@ pub fn assign_ticket_to_bay(conn: &Connection, ticket_id: i64, bay_id: i64) -> A
         |row| row.get(0),
     )?;
     if bay_status != "READY" || current.is_some() {
-        return Err(AppError::msg("الحفرة غير جاهزة"));
+        return Err(AppError::msg("الحفرة غير جاهزة (قد تكون خارج الخدمة أو مشغولة)"));
     }
 
     let started = now_iso();
@@ -219,7 +270,7 @@ pub fn assign_ticket_to_bay(conn: &Connection, ticket_id: i64, bay_id: i64) -> A
 pub fn call_next(conn: &Connection, bay_id: Option<i64>) -> AppResult<Ticket> {
     let target_bay = match bay_id {
         Some(id) => id,
-        None => first_ready_bay(conn)?.ok_or_else(|| AppError::msg("لا توجد حفرة جاهزة"))?,
+        None => first_ready_bay(conn)?.ok_or_else(|| AppError::msg("لا توجد حفرة جاهزة استقبال"))?,
     };
     let next_id: i64 = conn
         .query_row(
@@ -242,13 +293,30 @@ pub fn complete_ticket(conn: &Connection, ticket_id: i64) -> AppResult<Ticket> {
         "UPDATE tickets SET status = 'COMPLETED', completed_at = ?1 WHERE id = ?2",
         params![completed, ticket_id],
     )?;
-    if let Some(bay_id) = ticket.bay_id {
+    if let Some(freed_bay_id) = ticket.bay_id {
         conn.execute(
             "UPDATE bays SET status = 'READY', current_ticket_id = NULL WHERE id = ?1 AND current_ticket_id = ?2",
-            params![bay_id, ticket_id],
+            params![freed_bay_id, ticket_id],
         )?;
+        clear_last_called_if_needed(conn, ticket_id)?;
+
+        // Auto-assign next waiting ticket to the freed bay if auto_assign is enabled
+        let settings = db::load_settings(conn)?;
+        if settings.auto_assign {
+            let next_waiting_id: Option<i64> = conn
+                .query_row(
+                    "SELECT id FROM tickets WHERE status = 'WAITING' ORDER BY sequence ASC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if let Some(next_id) = next_waiting_id {
+                let _ = assign_ticket_to_bay(conn, next_id, freed_bay_id);
+            }
+        }
+    } else {
+        clear_last_called_if_needed(conn, ticket_id)?;
     }
-    clear_last_called_if_needed(conn, ticket_id)?;
     get_ticket(conn, ticket_id)?.ok_or_else(|| AppError::msg("فشل قراءة الدور"))
 }
 
@@ -371,6 +439,11 @@ pub fn update_settings(conn: &Connection, patch: &AppSettings) -> AppResult<AppS
     )?;
     db::set_setting(
         conn,
+        "auto_assign",
+        if patch.auto_assign { "true" } else { "false" },
+    )?;
+    db::set_setting(
+        conn,
         "last_called_ticket_id",
         &current
             .last_called_ticket_id
@@ -397,6 +470,21 @@ pub fn daily_report(conn: &Connection, date: &str) -> AppResult<DailyReport> {
             .map_err(AppError::from)
     };
 
+    let mut stmt = conn.prepare(
+        "SELECT bay_id, COUNT(*) FROM tickets \
+         WHERE created_at LIKE ?1 AND status = 'COMPLETED' AND bay_id IS NOT NULL \
+         GROUP BY bay_id"
+    )?;
+    
+    let mut rows = stmt.query(rusqlite::params![like])?;
+    let mut bay_stats = Vec::new();
+    while let Some(row) = rows.next()? {
+        bay_stats.push(crate::models::BayReport {
+            bay_id: row.get(0)?,
+            completed: row.get(1)?,
+        });
+    }
+
     Ok(DailyReport {
         date: date.to_string(),
         total: count(None)?,
@@ -405,6 +493,7 @@ pub fn daily_report(conn: &Connection, date: &str) -> AppResult<DailyReport> {
         waiting: count(Some("WAITING"))?,
         in_service: count(Some("IN_SERVICE"))?,
         served: count(Some("COMPLETED"))?,
+        bay_stats,
     })
 }
 

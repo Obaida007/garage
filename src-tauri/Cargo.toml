@@ -1,12 +1,12 @@
 [package]
-name = "al-sahil-garage"
+name = "Al-baroudi-garage"
 version = "1.0.0"
-description = "Al-Sahil Garage queue management"
-authors = ["Al-Sahil Garage"]
+description = "Al-baroudi Garage queue management"
+authors = ["Al-baroudi Garage"]
 edition = "2021"
 
 [lib]
-name = "al_sahil_garage_lib"
+name = "al_baroudi_garage_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

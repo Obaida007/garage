@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AppSettings,
+  Bay,
   CreateTicketResult,
   DailyReport,
   GarageSnapshot,
@@ -19,6 +20,8 @@ export const api = {
   callNext: (bayId?: number | null) => invoke<Ticket>("call_next", { bayId: bayId ?? null }),
   assign: (ticketId: number, bayId: number) =>
     invoke<Ticket>("assign_ticket", { ticketId, bayId }),
+  setBayOutOfService: (bayId: number, outOfService: boolean) =>
+    invoke<Bay>("set_bay_out_of_service", { bayId, outOfService }),
   completeBay: (bayId: number) => invoke<Ticket>("complete_bay", { bayId }),
   completeTicket: (ticketId: number) => invoke<Ticket>("complete_ticket", { ticketId }),
   cancelTicket: (ticketId: number) => invoke<Ticket>("cancel_ticket", { ticketId }),

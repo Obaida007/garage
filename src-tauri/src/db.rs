@@ -52,7 +52,7 @@ fn migrate(conn: &Connection) -> AppResult<()> {
         CREATE TABLE IF NOT EXISTS bays (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
-            status TEXT NOT NULL CHECK(status IN ('READY','BUSY')),
+            status TEXT NOT NULL CHECK(status IN ('READY','BUSY','OUT_OF_SERVICE')),
             current_ticket_id INTEGER,
             FOREIGN KEY(current_ticket_id) REFERENCES tickets(id)
         );
@@ -61,6 +61,27 @@ fn migrate(conn: &Connection) -> AppResult<()> {
         CREATE INDEX IF NOT EXISTS idx_tickets_created ON tickets(created_at);
         "#,
     )?;
+
+    // Migrate old bays table if it had restrictive check constraint
+    let sql = "SELECT sql FROM sqlite_master WHERE type='table' AND name='bays'";
+    if let Ok(table_sql) = conn.query_row(sql, [], |row| row.get::<_, String>(0)) {
+        if !table_sql.contains("OUT_OF_SERVICE") {
+            let _ = conn.execute_batch(
+                r#"
+                CREATE TABLE bays_temp (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('READY','BUSY','OUT_OF_SERVICE')),
+                    current_ticket_id INTEGER,
+                    FOREIGN KEY(current_ticket_id) REFERENCES tickets(id)
+                );
+                INSERT INTO bays_temp SELECT id, name, status, current_ticket_id FROM bays;
+                DROP TABLE bays;
+                ALTER TABLE bays_temp RENAME TO bays;
+                "#,
+            );
+        }
+    }
 
     seed_bays(conn)?;
     seed_settings(conn)?;
@@ -88,6 +109,7 @@ fn seed_settings(conn: &Connection) -> AppResult<()> {
     set_if_missing(conn, "waiting_monitor_id", &defaults.waiting_monitor_id)?;
     set_if_missing(conn, "waiting_fullscreen", "true")?;
     set_if_missing(conn, "last_called_ticket_id", "")?;
+    set_if_missing(conn, "auto_assign", "true")?;
     Ok(())
 }
 
@@ -151,6 +173,9 @@ pub fn load_settings(conn: &Connection) -> AppResult<AppSettings> {
         } else {
             v.parse().ok()
         };
+    }
+    if let Some(v) = get_setting(conn, "auto_assign")? {
+        settings.auto_assign = v == "true" || v == "1";
     }
     Ok(settings)
 }

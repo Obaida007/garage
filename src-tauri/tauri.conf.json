@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Al-Sahil Garage",
+  "productName": "كراج البارودي",
   "version": "1.0.0",
-  "identifier": "com.alsahil.garage",
+  "identifier": "com.albaroudi.garage",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Al-Sahil Garage",
+        "title": "كراج البارودي",
         "width": 1440,
         "height": 920,
         "minWidth": 1100,
@@ -28,7 +28,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": "all",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -40,10 +40,10 @@
         "type": "downloadBootstrapper"
       }
     },
-    "shortDescription": "نظام إدارة أدوار كراج الساحل",
-    "longDescription": "تطبيق مكتبي لإدارة أدوار الزبائن في كراج تغيير زيت السيارات، مع طباعة حرارية وشاشة انتظار.",
-    "publisher": "Al-Sahil Garage",
+    "shortDescription": "نظام إدارة أدوار كراج البارودي",
+    "longDescription": "تطبيق مكتبي لإدارة أدوار الزبائن في كراج البارودي لتغيير زيت وخدمات السيارات، مع طباعة حرارية وشاشة انتظار.",
+    "publisher": "كراج البارودي",
     "category": "Business",
-    "copyright": "Al-Sahil Garage"
+    "copyright": "كراج البارودي"
   }
 }

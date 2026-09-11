@@ -1,8 +1,8 @@
 {
-  "name": "al-sahil-garage",
+  "name": "al-baroudi-garage",
   "private": true,
   "version": "1.0.0",
-  "description": "Al-Sahil Garage queue management for car oil change",
+  "description": "Al-Baroudi Garage queue management for car oil change",
   "type": "module",
   "scripts": {
     "dev": "vite",

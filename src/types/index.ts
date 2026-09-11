@@ -1,5 +1,5 @@
 export type TicketStatus = "WAITING" | "IN_SERVICE" | "COMPLETED" | "CANCELLED";
-export type BayStatus = "READY" | "BUSY";
+export type BayStatus = "READY" | "BUSY" | "OUT_OF_SERVICE";
 
 export type Ticket = {
   id: number;
@@ -31,6 +31,8 @@ export type AppSettings = {
   waitingMonitorId: string;
   waitingFullscreen: boolean;
   lastCalledTicketId: number | null;
+  /** When true tickets are auto-assigned to ready bays. When false the cashier calls manually. */
+  autoAssign: boolean;
 };
 
 export type BoardService = {
@@ -70,6 +72,12 @@ export type DailyReport = {
   waiting: number;
   inService: number;
   served: number;
+  bayStats: BayReport[];
+};
+
+export type BayReport = {
+  bayId: number;
+  completed: number;
 };
 
 export type MonitorInfo = {

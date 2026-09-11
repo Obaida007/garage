@@ -67,8 +67,21 @@ export function SettingsPage() {
             <Label>English UI</Label>
             <Switch checked={locale === "en"} onCheckedChange={(v) => setLocale(v ? "en" : "ar")} />
           </div>
+          <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/40">
+            <div>
+              <div className="font-semibold text-sm">{t(locale, "autoAssignMode")}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {settings.autoAssign ? t(locale, "autoAssignDesc") : t(locale, "manualAssignDesc")}
+              </div>
+            </div>
+            <Switch
+              checked={settings.autoAssign}
+              onCheckedChange={(v) => patch("autoAssign", v)}
+            />
+          </div>
         </CardContent>
       </Card>
+
 
       <Card>
         <CardHeader>

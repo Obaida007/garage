@@ -48,6 +48,7 @@ pub fn run() {
             commands::list_recent_tickets,
             commands::call_next,
             commands::assign_ticket,
+            commands::set_bay_out_of_service,
             commands::complete_bay,
             commands::complete_ticket,
             commands::cancel_ticket,
@@ -69,7 +70,7 @@ pub fn run() {
             commands::db_path,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Al-Sahil Garage");
+        .expect("error while running Al-Baroudi Garage");
 }
 
 #[cfg(test)]

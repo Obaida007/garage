@@ -1,6 +1,6 @@
-# Al-Sahil Garage
+# كراج البارودي (Al-Baroudi Garage)
 
-تطبيق Windows مكتبي (Offline) لإدارة أدوار الزبائن في كراج تغيير زيت السيارات.
+تطبيق Windows مكتبي (Offline) لإدارة أدوار الزبائن في كراج البارودي لخدمات وصيانة السيارات.
 
 التقنيات: React + TypeScript + Vite + Tailwind CSS + shadcn/ui + Tauri + SQLite.
 
@@ -33,7 +33,7 @@ cargo test
 
 SQLite تُنشأ تلقائياً عند أول تشغيل في مجلد بيانات التطبيق:
 
-`%AppData%\com.alsahil.garage\garage.db`
+`%AppData%\com.albaroudi.garage\garage.db`
 
 لا حاجة لتثبيت SQLite أو تشغيل خادم.
 
@@ -68,11 +68,9 @@ npm run tauri:build
 
 مثل:
 
-`Al-Sahil Garage_1.0.0_x64-setup.exe`
+`Al-Baroudi-Garage-Setup.exe`
 
-يمكن إعادة تسميته إلى `Al-Sahil-Garage-Setup.exe` للتوزيع.
-
-بعد التثبيت يظهر البرنامج باسم **Al-Sahil Garage** مع اختصار سطح المكتب وقائمة ابدأ. المستخدم النهائي لا يحتاج Node.js أو Rust أو npm.
+بعد التثبيت يظهر البرنامج باسم **كراج البارودي** مع اختصار سطح المكتب وقائمة ابدأ. المستخدم النهائي لا يحتاج Node.js أو Rust أو npm.
 
 ## إصدار Production
 

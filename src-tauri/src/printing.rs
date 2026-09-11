@@ -206,7 +206,7 @@ mod windows_print {
                 );
             }
 
-            let doc_name: Vec<u16> = "Al-Sahil Ticket"
+            let doc_name: Vec<u16> = "تذكرة البارودي"
                 .encode_utf16()
                 .chain(std::iter::once(0))
                 .collect();

@@ -37,6 +37,7 @@ impl TicketStatus {
 pub enum BayStatus {
     Ready,
     Busy,
+    OutOfService,
 }
 
 impl BayStatus {
@@ -44,6 +45,7 @@ impl BayStatus {
         match self {
             Self::Ready => "READY",
             Self::Busy => "BUSY",
+            Self::OutOfService => "OUT_OF_SERVICE",
         }
     }
 
@@ -51,6 +53,7 @@ impl BayStatus {
         match value {
             "READY" => Ok(Self::Ready),
             "BUSY" => Ok(Self::Busy),
+            "OUT_OF_SERVICE" => Ok(Self::OutOfService),
             other => Err(format!("unknown bay status: {other}")),
         }
     }
@@ -92,13 +95,16 @@ pub struct AppSettings {
     pub waiting_monitor_id: String,
     pub waiting_fullscreen: bool,
     pub last_called_ticket_id: Option<i64>,
+    /// When true, tickets are auto-assigned to ready bays immediately.
+    /// When false, the cashier must manually call each ticket.
+    pub auto_assign: bool,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            garage_name: "كراج الساحل".into(),
-            print_header: "AL-SAHIL GARAGE".into(),
+            garage_name: "كراج البارودي".into(),
+            print_header: "كراج البارودي".into(),
             ticket_prefix: String::new(),
             next_sequence: 1,
             printer_name: String::new(),
@@ -106,6 +112,7 @@ impl Default for AppSettings {
             waiting_monitor_id: String::new(),
             waiting_fullscreen: true,
             last_called_ticket_id: None,
+            auto_assign: true,
         }
     }
 }
@@ -157,6 +164,14 @@ pub struct DailyReport {
     pub waiting: i64,
     pub in_service: i64,
     pub served: i64,
+    pub bay_stats: Vec<BayReport>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BayReport {
+    pub bay_id: i64,
+    pub completed: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

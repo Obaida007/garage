@@ -1,5 +1,7 @@
 @echo off
-set PATH=C:\Users\TECHNO\.cargo\bin;C:\Users\TECHNO\AppData\Local\Programs\Kimi\resources\resources\runtime;%PATH%
-cd /d C:\Users\TECHNO\Projects\al-sahil-garage
-call node_modules\.bin\tauri.cmd build --config "{\"build\":{\"beforeBuildCommand\":\"\"}}" > build.log 2>&1
+
+
+set PATH=C:\Users\interlink\.cargo\bin;C:\Users\interlink\AppData\Local\Programs\Kimi\resources\resources\runtime;%PATH%
+cd /d C:\Users\interlink\garage
+call npm run tauri:build  > build.log 2>&1
 echo %ERRORLEVEL% > build.exit
