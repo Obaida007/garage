@@ -13,6 +13,8 @@ use crate::{db, garage, printing, state::AppState};
 
 pub const PORT: u16 = 7878;
 const MOBILE_HTML: &str = include_str!("mobile.html");
+const ICON_192: &[u8] = include_bytes!("../icons/128x128@2x.png");
+const ICON_512: &[u8] = include_bytes!("../icons/icon.png");
 
 #[derive(Clone)]
 struct S(AppHandle);
@@ -37,6 +39,9 @@ pub fn spawn(handle: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let app = Router::new()
             .route("/", get(serve_html))
+            .route("/manifest.json", get(serve_manifest))
+            .route("/icon-192.png", get(serve_icon_192))
+            .route("/icon-512.png", get(serve_icon_512))
             .route("/api/snapshot", get(api_snapshot))
             .route("/api/ticket", post(api_create_ticket))
             .route("/api/auth", post(api_auth))
@@ -98,6 +103,42 @@ fn emit_update(handle: &AppHandle) {
 
 async fn serve_html() -> Html<&'static str> {
     Html(MOBILE_HTML)
+}
+
+async fn serve_manifest(State(S(handle)): State<S>) -> impl IntoResponse {
+    let name = {
+        let state = handle.state::<AppState>();
+        let conn = state.db.lock();
+        db::load_settings(&conn)
+            .map(|s| s.garage_name)
+            .unwrap_or_default()
+    };
+    let name = if name.is_empty() { "OS Tickets".to_string() } else { name };
+    let body = serde_json::json!({
+        "name": name,
+        "short_name": name,
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#f1f5f9",
+        "theme_color": "#0f172a",
+        "icons": [
+            { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+            { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+        ]
+    })
+    .to_string();
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/manifest+json")],
+        body,
+    )
+}
+
+async fn serve_icon_192() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "image/png")], ICON_192)
+}
+
+async fn serve_icon_512() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "image/png")], ICON_512)
 }
 
 async fn api_snapshot(State(S(handle)): State<S>) -> impl IntoResponse {
