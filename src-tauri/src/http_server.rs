@@ -40,9 +40,10 @@ pub fn spawn(handle: AppHandle) {
             .route("/api/snapshot", get(api_snapshot))
             .route("/api/ticket", post(api_create_ticket))
             .route("/api/auth", post(api_auth))
+            .route("/api/ticket-priority", post(api_create_priority_ticket))
             .route("/api/call-next", post(api_call_next))
-            .route("/api/complete-bay/{bay_id}", post(api_complete_bay))
-            .route("/api/cancel/{ticket_id}", post(api_cancel))
+            .route("/api/complete-bay/:bay_id", post(api_complete_bay))
+            .route("/api/cancel/:ticket_id", post(api_cancel))
             .with_state(S(handle));
 
         let addr = SocketAddr::from(([0, 0, 0, 0], PORT));
@@ -153,6 +154,29 @@ async fn api_auth(
     let token = new_token();
     *state.mobile_token.lock() = Some(token.clone());
     Json(AuthResponse { token }).into_response()
+}
+
+async fn api_create_priority_ticket(State(S(handle)): State<S>) -> impl IntoResponse {
+    let h = handle.clone();
+    let result = tokio::task::block_in_place(move || {
+        let state = h.state::<AppState>();
+        let mut conn = state.db.lock();
+        let r = garage::create_priority_ticket_and_maybe_print(&mut conn, |ticket, settings| {
+            printing::print_ticket(ticket, settings)
+        });
+        if r.is_ok() {
+            if let Ok(snap) = garage::snapshot(&conn) {
+                drop(conn);
+                let _ = h.emit("garage-updated", &snap);
+            }
+        }
+        r
+    });
+
+    match result {
+        Ok(r) => Json(r).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
 }
 
 async fn api_call_next(

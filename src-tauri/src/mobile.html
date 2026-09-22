@@ -42,7 +42,7 @@
     .btn-sm{height:50px;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .1s}
     .btn-sm:active{opacity:.7}
     .btn-new-sm{flex:2;background:#0f172a;color:#fff}
-    .btn-call-sm{flex:1;background:#22c55e;color:#fff}
+    .btn-priority-sm{flex:1;background:#f59e0b;color:#fff}
     .btn-logout{flex:0 0 50px;background:none;border:2px solid #e2e8f0;border-radius:12px;font-size:20px;cursor:pointer}
 
     /* Bay cards */
@@ -125,7 +125,7 @@
   <div id="queueBody" class="tab-body" style="display:none"></div>
   <div class="action-bar">
     <button class="btn-sm btn-new-sm" onclick="createTicket()">+ دور جديد</button>
-    <button class="btn-sm btn-call-sm" onclick="callNext()">استدعاء</button>
+    <button id="btnPriority" class="btn-sm btn-priority-sm" onclick="createPriorityTicket()" style="display:none">⚡ أولوية</button>
     <button class="btn-logout" onclick="doLogout()" title="خروج">🔓</button>
   </div>
 </div>
@@ -186,6 +186,9 @@
     if (w > 0) { pill.textContent = w + ' منتظر'; pill.style.display = ''; }
     else pill.style.display = 'none';
     document.getElementById('kioskWait').textContent = w > 0 ? w + ' شخص في الانتظار' : 'لا يوجد منتظرون';
+    // show priority button only when the feature is enabled and we're in manager mode
+    const priorityEnabled = snap.settings?.priorityEnabled;
+    document.getElementById('btnPriority').style.display = (token && priorityEnabled) ? '' : 'none';
     if (token) renderManager();
   }
 
@@ -246,6 +249,21 @@
       await poll();
     } catch { toast('تعذر الاتصال بالخادم'); }
     finally { btn.disabled = false; btn.innerHTML = 'دور جديد'; }
+  }
+
+  /* ── Priority ticket ── */
+  async function createPriorityTicket() {
+    const btn = document.getElementById('btnPriority');
+    btn.disabled = true;
+    try {
+      const r = await fetch(BASE + '/api/ticket-priority', { method: 'POST' });
+      if (!r.ok) { toast('فشل إنشاء دور الأولوية'); return; }
+      const d = await r.json();
+      const num = d.ticket?.ticketNumber;
+      toast('أولوية ' + (num||'') + ' تم إصداره', true);
+      await poll();
+    } catch { toast('تعذر الاتصال بالخادم'); }
+    finally { btn.disabled = false; }
   }
 
   /* ── Cashier actions ── */
