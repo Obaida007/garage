@@ -39,8 +39,8 @@ fn migrate(conn: &Connection) -> AppResult<()> {
 
         CREATE TABLE IF NOT EXISTS tickets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ticket_number TEXT NOT NULL UNIQUE,
-            sequence INTEGER NOT NULL UNIQUE,
+            ticket_number TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
             status TEXT NOT NULL CHECK(status IN ('WAITING','IN_SERVICE','COMPLETED','CANCELLED')),
             bay_id INTEGER,
             created_at TEXT NOT NULL,
@@ -59,6 +59,7 @@ fn migrate(conn: &Connection) -> AppResult<()> {
 
         CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
         CREATE INDEX IF NOT EXISTS idx_tickets_created ON tickets(created_at);
+        CREATE INDEX IF NOT EXISTS idx_tickets_number_created ON tickets(ticket_number, created_at);
         "#,
     )?;
 
@@ -83,6 +84,63 @@ fn migrate(conn: &Connection) -> AppResult<()> {
         }
     }
 
+    // Add the "active" column (soft delete/archive flag) if this DB predates it.
+    let has_active_column = conn
+        .prepare("SELECT active FROM bays LIMIT 1")
+        .is_ok();
+    if !has_active_column {
+        conn.execute_batch("ALTER TABLE bays ADD COLUMN active INTEGER NOT NULL DEFAULT 1;")?;
+    }
+
+    // Add the "is_priority" column (priority/suffix tickets) if this DB predates it.
+    let has_priority_column = conn
+        .prepare("SELECT is_priority FROM tickets LIMIT 1")
+        .is_ok();
+    if !has_priority_column {
+        conn.execute_batch(
+            "ALTER TABLE tickets ADD COLUMN is_priority INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+
+    // Migrate old "tickets" tables that still carry the legacy global UNIQUE
+    // constraints on ticket_number/sequence. Those must only be unique per
+    // day once numbers reset daily, not forever, otherwise every reset after
+    // the first day silently fails (today's "001" collides with a past
+    // day's "001" and the counter just keeps climbing).
+    let tickets_sql = "SELECT sql FROM sqlite_master WHERE type='table' AND name='tickets'";
+    if let Ok(table_sql) = conn.query_row(tickets_sql, [], |row| row.get::<_, String>(0)) {
+        if table_sql.contains("UNIQUE") {
+            conn.execute_batch("PRAGMA foreign_keys = OFF;")?;
+            let migration = conn.execute_batch(
+                r#"
+                CREATE TABLE tickets_temp (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticket_number TEXT NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('WAITING','IN_SERVICE','COMPLETED','CANCELLED')),
+                    bay_id INTEGER,
+                    created_at TEXT NOT NULL,
+                    started_at TEXT,
+                    completed_at TEXT,
+                    cancelled_at TEXT,
+                    is_priority INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT INTO tickets_temp
+                    SELECT id, ticket_number, sequence, status, bay_id, created_at,
+                           started_at, completed_at, cancelled_at, is_priority
+                    FROM tickets;
+                DROP TABLE tickets;
+                ALTER TABLE tickets_temp RENAME TO tickets;
+                CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
+                CREATE INDEX IF NOT EXISTS idx_tickets_created ON tickets(created_at);
+                CREATE INDEX IF NOT EXISTS idx_tickets_number_created ON tickets(ticket_number, created_at);
+                "#,
+            );
+            conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+            migration?;
+        }
+    }
+
     seed_bays(conn)?;
     seed_settings(conn)?;
     Ok(())
@@ -100,6 +158,18 @@ fn seed_bays(conn: &Connection) -> AppResult<()> {
 
 fn seed_settings(conn: &Connection) -> AppResult<()> {
     let defaults = AppSettings::default();
+
+    // A pre-existing install already has a garage_name row (even an empty one the
+    // user cleared intentionally). Only a brand-new database lacks it entirely, so
+    // this is the signal for whether the first-run setup wizard should show.
+    let is_existing_install = get_setting(conn, "garage_name")?.is_some();
+    set_if_missing(
+        conn,
+        "setup_completed",
+        if is_existing_install { "true" } else { "false" },
+    )?;
+
+    set_if_missing(conn, "waiting_layout", &defaults.waiting_layout)?;
     set_if_missing(conn, "garage_name", &defaults.garage_name)?;
     set_if_missing(conn, "print_header", &defaults.print_header)?;
     set_if_missing(conn, "ticket_prefix", &defaults.ticket_prefix)?;
@@ -111,6 +181,12 @@ fn seed_settings(conn: &Connection) -> AppResult<()> {
     set_if_missing(conn, "last_called_ticket_id", "")?;
     set_if_missing(conn, "auto_assign", "true")?;
     set_if_missing(conn, "last_reset_date", "")?;
+    set_if_missing(conn, "logo_path", &defaults.logo_path)?;
+    set_if_missing(conn, "number_format", &defaults.number_format)?;
+    set_if_missing(conn, "settings_password", &defaults.settings_password)?;
+    set_if_missing(conn, "priority_enabled", "false")?;
+    set_if_missing(conn, "priority_suffix", &defaults.priority_suffix)?;
+    set_if_missing(conn, "next_priority_sequence", &defaults.next_priority_sequence.to_string())?;
     Ok(())
 }
 
@@ -180,6 +256,30 @@ pub fn load_settings(conn: &Connection) -> AppResult<AppSettings> {
     }
     if let Some(v) = get_setting(conn, "last_reset_date")? {
         settings.last_reset_date = v;
+    }
+    if let Some(v) = get_setting(conn, "logo_path")? {
+        settings.logo_path = v;
+    }
+    if let Some(v) = get_setting(conn, "number_format")? {
+        settings.number_format = if v == "ar" { "ar".into() } else { "en".into() };
+    }
+    if let Some(v) = get_setting(conn, "settings_password")? {
+        settings.settings_password = v;
+    }
+    if let Some(v) = get_setting(conn, "priority_enabled")? {
+        settings.priority_enabled = v == "true" || v == "1";
+    }
+    if let Some(v) = get_setting(conn, "priority_suffix")? {
+        settings.priority_suffix = v;
+    }
+    if let Some(v) = get_setting(conn, "next_priority_sequence")? {
+        settings.next_priority_sequence = v.parse().unwrap_or(1);
+    }
+    if let Some(v) = get_setting(conn, "waiting_layout")? {
+        settings.waiting_layout = if v == "table" { "table".into() } else { "cards".into() };
+    }
+    if let Some(v) = get_setting(conn, "setup_completed")? {
+        settings.setup_completed = v == "true" || v == "1";
     }
     Ok(settings)
 }

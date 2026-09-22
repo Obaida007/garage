@@ -40,6 +40,19 @@ pub fn create_ticket(app: AppHandle) -> AppResult<CreateTicketResult> {
 }
 
 #[tauri::command]
+pub fn create_priority_ticket(app: AppHandle) -> AppResult<CreateTicketResult> {
+    let result = {
+        let state = app.state::<AppState>();
+        let mut conn = state.db.lock();
+        garage::create_priority_ticket_and_maybe_print(&mut conn, |ticket, settings| {
+            printing::print_ticket(ticket, settings)
+        })?
+    };
+    let _ = emit_update(&app);
+    Ok(result)
+}
+
+#[tauri::command]
 pub fn reprint_ticket(app: AppHandle, ticket_id: i64) -> AppResult<()> {
     let state = app.state::<AppState>();
     let conn = state.db.lock();
@@ -167,6 +180,80 @@ pub fn move_ticket(app: AppHandle, ticket_id: i64, to_bay_id: i64) -> AppResult<
 }
 
 #[tauri::command]
+pub fn rename_bay(app: AppHandle, bay_id: i64, name: String) -> AppResult<Bay> {
+    let bay = {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock();
+        garage::rename_bay(&conn, bay_id, &name)?
+    };
+    let _ = emit_update(&app);
+    Ok(bay)
+}
+
+#[tauri::command]
+pub fn add_bay(app: AppHandle, name: String) -> AppResult<Bay> {
+    let bay = {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock();
+        garage::add_bay(&conn, &name)?
+    };
+    let _ = emit_update(&app);
+    Ok(bay)
+}
+
+#[tauri::command]
+pub fn set_bay_active(app: AppHandle, bay_id: i64, active: bool) -> AppResult<Bay> {
+    let bay = {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock();
+        garage::set_bay_active(&conn, bay_id, active)?
+    };
+    let _ = emit_update(&app);
+    Ok(bay)
+}
+
+#[tauri::command]
+pub fn upload_logo(app: AppHandle, source_path: String) -> AppResult<String> {
+    let source = PathBuf::from(&source_path);
+    let ext = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
+    if !matches!(ext.as_str(), "png" | "jpg" | "jpeg") {
+        return Err(crate::error::AppError::msg(
+            "صيغة الصورة غير مدعومة (استخدم PNG أو JPG)",
+        ));
+    }
+    let dir = app.path().app_data_dir().map_err(|e| crate::error::AppError::msg(e.to_string()))?;
+    std::fs::create_dir_all(&dir)?;
+
+    // اسم فريد لكل رفعة بدل اسم ثابت (logo.png): وإلا تبقى الواجهة والطباعة
+    // تعرضان الملف القديم من ذاكرة التخزين المؤقت للـ webview (أو نسخة قديمة
+    // مقفلة على ويندوز) رغم استبدال محتواه، وتحتاجان إعادة تشغيل التطبيق لتُحدَّث.
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let dest = dir.join(format!("logo-{nanos}.{ext}"));
+    std::fs::copy(&source, &dest)?;
+
+    // تنظيف أفضل جهد للشعارات القديمة (الاسم الثابت من نسخ سابقة، والأسماء
+    // الفريدة من رفعات سابقة) بعد نجاح كتابة الشعار الجديد فقط.
+    if let Ok(read_dir) = std::fs::read_dir(&dir) {
+        for entry in read_dir.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("logo") && entry.path() != dest {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+
+    Ok(dest.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub fn get_settings(state: State<AppState>) -> AppResult<AppSettings> {
     let conn = state.db.lock();
     db::load_settings(&conn)
@@ -250,6 +337,17 @@ pub fn get_report(state: State<AppState>, date: Option<String>) -> AppResult<Dai
 }
 
 #[tauri::command]
+pub fn reset_numbering(app: AppHandle) -> AppResult<()> {
+    {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock();
+        garage::reset_numbering(&conn)?;
+    }
+    let _ = emit_update(&app);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn reset_open_queue(app: AppHandle) -> AppResult<()> {
     {
         let state = app.state::<AppState>();
@@ -285,4 +383,14 @@ pub fn is_autostart_enabled(app: AppHandle) -> AppResult<bool> {
 #[tauri::command]
 pub fn db_path(state: State<AppState>) -> AppResult<String> {
     Ok(state.db_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn get_local_ips() -> Vec<String> {
+    crate::http_server::local_ips()
+}
+
+#[tauri::command]
+pub fn get_mobile_port() -> u16 {
+    crate::http_server::PORT
 }

@@ -1,19 +1,19 @@
 [package]
-name = "Al-baroudi-garage"
+name = "OS-Tickets"
 version = "1.0.0"
-description = "Al-baroudi Garage queue management"
-authors = ["Al-baroudi Garage"]
+description = "OS-Tickets"
+authors = ["OS Tickets"]
 edition = "2021"
 
 [lib]
-name = "al_baroudi_garage_lib"
+name = "os_tickets_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["protocol-asset", "image-png"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-dialog = "2"
@@ -23,6 +23,14 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
 parking_lot = "0.12"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+axum = { version = "0.7", features = ["http1"] }
+tokio = { version = "1", features = ["net"] }
+if-addrs = "0.13"
+
+# تشكيل العربية ورسم التذكرة كصورة على الأنظمة غير ويندوز (تُطبع عبر CUPS).
+[target.'cfg(not(windows))'.dependencies]
+cosmic-text = "0.19"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [

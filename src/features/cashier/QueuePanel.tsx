@@ -1,4 +1,6 @@
+import { Printer, UserCheck, Users, XCircle, Zap } from "lucide-react";
 import type { Ticket } from "@/types";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { t } from "@/utils/i18n";
@@ -22,7 +24,8 @@ export function QueuePanel({
   return (
     <Card className="flex flex-col max-h-[calc(100vh-220px)]">
       <CardHeader className="shrink-0">
-        <CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-muted-foreground" />
           {t(locale, "queue")} — {t(locale, "waiting")}: {waiting.length}
         </CardTitle>
       </CardHeader>
@@ -33,12 +36,22 @@ export function QueuePanel({
           waiting.map((ticket) => (
             <div
               key={ticket.id}
-              className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+              className={
+                ticket.isPriority
+                  ? "flex flex-col gap-2 rounded-xl border-2 border-amber-400 bg-amber-50 p-3 shadow-sm"
+                  : "flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+              }
             >
               <div className="flex items-center justify-between">
                 <span className="text-3xl font-black tracking-wide text-slate-800">
                   {ticket.ticketNumber}
                 </span>
+                {ticket.isPriority && (
+                  <Badge variant="warning" className="gap-1">
+                    <Zap className="h-3.5 w-3.5" />
+                    {t(locale, "priorityBadge")}
+                  </Badge>
+                )}
               </div>
 
               <div className="text-xs text-muted-foreground">
@@ -55,6 +68,7 @@ export function QueuePanel({
                   className="w-full font-bold"
                   onClick={() => onAssign(ticket.id)}
                 >
+                  <UserCheck className="h-4 w-4" />
                   {t(locale, "assign")}
                 </Button>
                 <Button
@@ -63,6 +77,7 @@ export function QueuePanel({
                   className="w-full"
                   onClick={() => onReprint(ticket.id)}
                 >
+                  <Printer className="h-4 w-4" />
                   {t(locale, "reprint")}
                 </Button>
                 <Button
@@ -71,6 +86,7 @@ export function QueuePanel({
                   className="w-full"
                   onClick={() => onCancel(ticket.id)}
                 >
+                  <XCircle className="h-4 w-4" />
                   {t(locale, "cancel")}
                 </Button>
               </div>

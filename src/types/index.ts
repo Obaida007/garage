@@ -11,6 +11,7 @@ export type Ticket = {
   startedAt: string | null;
   completedAt: string | null;
   cancelledAt: string | null;
+  isPriority: boolean;
 };
 
 export type Bay = {
@@ -19,6 +20,7 @@ export type Bay = {
   status: BayStatus;
   currentTicketId: number | null;
   currentTicket: Ticket | null;
+  active: boolean;
 };
 
 export type AppSettings = {
@@ -33,6 +35,15 @@ export type AppSettings = {
   lastCalledTicketId: number | null;
   /** When true tickets are auto-assigned to ready bays. When false the cashier calls manually. */
   autoAssign: boolean;
+  lastResetDate: string;
+  logoPath: string;
+  numberFormat: "ar" | "en";
+  settingsPassword: string;
+  priorityEnabled: boolean;
+  prioritySuffix: string;
+  nextPrioritySequence: number;
+  setupCompleted: boolean;
+  waitingLayout: "cards" | "table";
 };
 
 export type BoardService = {

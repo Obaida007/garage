@@ -9,7 +9,7 @@ import { t } from "@/utils/i18n";
 import type { DailyReport } from "@/types";
 
 export function ReportsPage() {
-  const { locale } = useGarage();
+  const { locale, snapshot } = useGarage();
   const [date, setDate] = useState(todayIso());
   const [report, setReport] = useState<DailyReport | null>(null);
 
@@ -59,16 +59,18 @@ export function ReportsPage() {
 
       {report?.bayStats && report.bayStats.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-2xl font-bold mb-4 text-slate-800">أداء الحفر (السيارات المخدومة)</h2>
+          <h2 className="text-2xl font-bold mb-4 text-slate-800">{t(locale, "bayPerformanceTitle")}</h2>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
             {report.bayStats.map((stat) => (
               <Card key={stat.bayId} className="border-sky-200 bg-sky-50 shadow-sm">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-bold text-sky-800">حفرة {stat.bayId}</CardTitle>
+                  <CardTitle className="text-sm font-bold text-sky-800">
+                    {snapshot?.bays.find((b) => b.id === stat.bayId)?.name ?? `${t(locale, "bay")} ${stat.bayId}`}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-black text-sky-600">{stat.completed}</div>
-                  <div className="text-xs text-sky-700/70 mt-1 font-bold">سيارة</div>
+                  <div className="text-xs text-sky-700/70 mt-1 font-bold">{t(locale, "customersUnit")}</div>
                 </CardContent>
               </Card>
             ))}

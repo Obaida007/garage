@@ -71,6 +71,7 @@ pub struct Ticket {
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
     pub cancelled_at: Option<String>,
+    pub is_priority: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +82,7 @@ pub struct Bay {
     pub status: String,
     pub current_ticket_id: Option<i64>,
     pub current_ticket: Option<Ticket>,
+    pub active: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,13 +102,30 @@ pub struct AppSettings {
     pub auto_assign: bool,
     /// The date (YYYY-MM-DD) when the sequence was last reset to 1.
     pub last_reset_date: String,
+    /// Path to the uploaded business logo image on disk. Empty = no logo.
+    pub logo_path: String,
+    /// Digit style used when printing ticket number/time: "ar" or "en".
+    pub number_format: String,
+    /// Plaintext password required to open the settings page. Empty = no lock.
+    pub settings_password: String,
+    /// Whether the separate priority (urgent) ticket lane is enabled.
+    pub priority_enabled: bool,
+    /// Suffix used for priority ticket numbers, e.g. "A" -> A001. Required (non-empty) when enabled.
+    pub priority_suffix: String,
+    /// Independent counter for priority ticket display numbers, reset daily alongside next_sequence.
+    pub next_priority_sequence: i64,
+    /// Whether the first-run setup wizard has been completed. Seeded true for
+    /// pre-existing installs so they are never forced through it retroactively.
+    pub setup_completed: bool,
+    /// Waiting screen layout: "cards" or "table".
+    pub waiting_layout: String,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            garage_name: "كراج البارودي".into(),
-            print_header: "كراج البارودي".into(),
+            garage_name: String::new(),
+            print_header: String::new(),
             ticket_prefix: String::new(),
             next_sequence: 1,
             printer_name: String::new(),
@@ -116,6 +135,14 @@ impl Default for AppSettings {
             last_called_ticket_id: None,
             auto_assign: true,
             last_reset_date: String::new(),
+            logo_path: String::new(),
+            number_format: "en".into(),
+            settings_password: String::new(),
+            priority_enabled: false,
+            priority_suffix: "A".into(),
+            next_priority_sequence: 1,
+            setup_completed: false,
+            waiting_layout: "cards".into(),
         }
     }
 }

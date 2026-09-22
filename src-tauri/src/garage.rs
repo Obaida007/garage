@@ -25,7 +25,7 @@ pub fn snapshot(conn: &Connection) -> AppResult<GarageSnapshot> {
 
 pub fn list_bays(conn: &Connection) -> AppResult<Vec<Bay>> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, status, current_ticket_id FROM bays ORDER BY id ASC",
+        "SELECT id, name, status, current_ticket_id, active FROM bays ORDER BY id ASC",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok((
@@ -33,12 +33,13 @@ pub fn list_bays(conn: &Connection) -> AppResult<Vec<Bay>> {
             row.get::<_, String>(1)?,
             row.get::<_, String>(2)?,
             row.get::<_, Option<i64>>(3)?,
+            row.get::<_, bool>(4)?,
         ))
     })?;
 
     let mut bays = Vec::new();
     for row in rows {
-        let (id, name, status, current_ticket_id) = row?;
+        let (id, name, status, current_ticket_id, active) = row?;
         let current_ticket = match current_ticket_id {
             Some(ticket_id) => get_ticket(conn, ticket_id)?,
             None => None,
@@ -49,20 +50,22 @@ pub fn list_bays(conn: &Connection) -> AppResult<Vec<Bay>> {
             status,
             current_ticket_id,
             current_ticket,
+            active,
         });
     }
     Ok(bays)
 }
 
+const TICKET_COLUMNS: &str =
+    "id, ticket_number, sequence, status, bay_id, created_at, started_at, completed_at, cancelled_at, is_priority";
+
 pub fn tickets_by_status(conn: &Connection, status: &str) -> AppResult<Vec<Ticket>> {
     let sql = if status == "WAITING" {
-        "SELECT id, ticket_number, sequence, status, bay_id, created_at, started_at, completed_at, cancelled_at
-         FROM tickets WHERE status = ?1 ORDER BY sequence ASC"
+        format!("SELECT {TICKET_COLUMNS} FROM tickets WHERE status = ?1 ORDER BY is_priority DESC, id ASC")
     } else {
-        "SELECT id, ticket_number, sequence, status, bay_id, created_at, started_at, completed_at, cancelled_at
-         FROM tickets WHERE status = ?1 ORDER BY started_at ASC, sequence ASC"
+        format!("SELECT {TICKET_COLUMNS} FROM tickets WHERE status = ?1 ORDER BY started_at ASC, id ASC")
     };
-    let mut stmt = conn.prepare(sql)?;
+    let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(params![status], map_ticket)?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(AppError::from)
@@ -70,8 +73,7 @@ pub fn tickets_by_status(conn: &Connection, status: &str) -> AppResult<Vec<Ticke
 
 pub fn get_ticket(conn: &Connection, id: i64) -> AppResult<Option<Ticket>> {
     conn.query_row(
-        "SELECT id, ticket_number, sequence, status, bay_id, created_at, started_at, completed_at, cancelled_at
-         FROM tickets WHERE id = ?1",
+        &format!("SELECT {TICKET_COLUMNS} FROM tickets WHERE id = ?1"),
         params![id],
         map_ticket,
     )
@@ -80,10 +82,15 @@ pub fn get_ticket(conn: &Connection, id: i64) -> AppResult<Option<Ticket>> {
 }
 
 pub fn find_ticket_by_number(conn: &Connection, number: &str) -> AppResult<Option<Ticket>> {
+    // رقم التذكرة لم يعد فريداً عالمياً بعد أن أصبح يُعاد استخدامه كل يوم، لذا
+    // نبحث في أدوار اليوم الحالي فقط (وهذا أصلاً الاستخدام الفعلي المقصود:
+    // البحث عن دور نشط في طابور اليوم من الكاشير) ونأخذ الأحدث كإجراء أمان.
+    let today_like = format!("{}%", today());
     conn.query_row(
-        "SELECT id, ticket_number, sequence, status, bay_id, created_at, started_at, completed_at, cancelled_at
-         FROM tickets WHERE ticket_number = ?1",
-        params![number.trim()],
+        &format!(
+            "SELECT {TICKET_COLUMNS} FROM tickets WHERE ticket_number = ?1 AND created_at LIKE ?2 ORDER BY id DESC LIMIT 1"
+        ),
+        params![number.trim(), today_like],
         map_ticket,
     )
     .optional()
@@ -91,10 +98,9 @@ pub fn find_ticket_by_number(conn: &Connection, number: &str) -> AppResult<Optio
 }
 
 pub fn recent_tickets(conn: &Connection, limit: i64) -> AppResult<Vec<Ticket>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, ticket_number, sequence, status, bay_id, created_at, started_at, completed_at, cancelled_at
-         FROM tickets ORDER BY id DESC LIMIT ?1",
-    )?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {TICKET_COLUMNS} FROM tickets ORDER BY id DESC LIMIT ?1"
+    ))?;
     let rows = stmt.query_map(params![limit], map_ticket)?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(AppError::from)
@@ -111,37 +117,64 @@ fn map_ticket(row: &rusqlite::Row<'_>) -> rusqlite::Result<Ticket> {
         started_at: row.get(6)?,
         completed_at: row.get(7)?,
         cancelled_at: row.get(8)?,
+        is_priority: row.get(9)?,
     })
+}
+
+/// Daily reset: if today is a new day, reset both ticket counters back to 1.
+fn ensure_daily_reset(conn: &Connection, settings: &mut AppSettings) -> AppResult<()> {
+    let today_str = today();
+    if settings.last_reset_date != today_str {
+        settings.next_sequence = 1;
+        settings.next_priority_sequence = 1;
+        db::set_setting(conn, "next_sequence", "1")?;
+        db::set_setting(conn, "next_priority_sequence", "1")?;
+        db::set_setting(conn, "last_reset_date", &today_str)?;
+        settings.last_reset_date = today_str;
+    }
+    Ok(())
+}
+
+/// بداية الترقيم الحالي: أكبر قيمة بين بداية اليوم وآخر تصفير يدوي. الأرقام تُعاد
+/// وتُستخدم من جديد لأدوار سابقة لهذه اللحظة، بينما تبقى أرقام الأدوار المفتوحة محجوزة.
+fn numbering_epoch(conn: &Connection) -> AppResult<String> {
+    let day_start = format!("{}T00:00:00", today());
+    let stored = db::get_setting(conn, "numbering_reset_at")?.unwrap_or_default();
+    Ok(if stored > day_start { stored } else { day_start })
+}
+
+/// تصفير يدوي لترقيم الأدوار (العادي والأولوية) ليبدأ من 001 من جديد.
+pub fn reset_numbering(conn: &Connection) -> AppResult<()> {
+    db::set_setting(conn, "next_sequence", "1")?;
+    db::set_setting(conn, "next_priority_sequence", "1")?;
+    db::set_setting(conn, "numbering_reset_at", &now_iso())?;
+    db::set_setting(conn, "last_reset_date", &today())?;
+    Ok(())
 }
 
 pub fn create_ticket(conn: &mut Connection) -> AppResult<Ticket> {
     let tx = conn.transaction()?;
     let mut settings = db::load_settings(&tx)?;
-
-    // Daily reset: if today is a new day, reset the sequence back to 1
-    let today_str = today();
-    if settings.last_reset_date != today_str {
-        settings.next_sequence = 1;
-        db::set_setting(&tx, "next_sequence", "1")?;
-        db::set_setting(&tx, "last_reset_date", &today_str)?;
-    }
+    ensure_daily_reset(&tx, &mut settings)?;
 
     let mut sequence = settings.next_sequence.max(1);
+    let epoch = numbering_epoch(&tx)?;
 
     loop {
         let number = format_ticket_number(&settings.ticket_prefix, sequence);
         let exists: Option<i64> = tx
             .query_row(
-                "SELECT id FROM tickets WHERE ticket_number = ?1 OR sequence = ?2",
-                params![number, sequence],
+                "SELECT id FROM tickets WHERE (ticket_number = ?1 OR sequence = ?2)
+                 AND (created_at >= ?3 OR status IN ('WAITING', 'IN_SERVICE'))",
+                params![number, sequence, epoch],
                 |row| row.get(0),
             )
             .optional()?;
         if exists.is_none() {
             let now = now_iso();
             tx.execute(
-                "INSERT INTO tickets (ticket_number, sequence, status, bay_id, created_at)
-                 VALUES (?1, ?2, 'WAITING', NULL, ?3)",
+                "INSERT INTO tickets (ticket_number, sequence, status, bay_id, created_at, is_priority)
+                 VALUES (?1, ?2, 'WAITING', NULL, ?3, 0)",
                 params![number, sequence, now],
             )?;
             let id = tx.last_insert_rowid();
@@ -157,6 +190,7 @@ pub fn create_ticket(conn: &mut Connection) -> AppResult<Ticket> {
                 started_at: None,
                 completed_at: None,
                 cancelled_at: None,
+                is_priority: false,
             });
         }
         sequence += 1;
@@ -166,6 +200,69 @@ pub fn create_ticket(conn: &mut Connection) -> AppResult<Ticket> {
     }
 }
 
+pub fn create_priority_ticket(conn: &mut Connection) -> AppResult<Ticket> {
+    let tx = conn.transaction()?;
+    let mut settings = db::load_settings(&tx)?;
+
+    if !settings.priority_enabled {
+        return Err(AppError::msg("خاصية دور الأولوية غير مفعّلة"));
+    }
+    let suffix = settings.priority_suffix.trim().to_string();
+    if suffix.is_empty() {
+        return Err(AppError::msg("لاحقة دور الأولوية لا يمكن أن تكون فارغة"));
+    }
+
+    ensure_daily_reset(&tx, &mut settings)?;
+
+    let mut sequence = settings.next_sequence.max(1);
+    let mut priority_sequence = settings.next_priority_sequence.max(1);
+    let epoch = numbering_epoch(&tx)?;
+
+    loop {
+        let number = format_ticket_number(&suffix, priority_sequence);
+        let exists: Option<i64> = tx
+            .query_row(
+                "SELECT id FROM tickets WHERE (ticket_number = ?1 OR sequence = ?2)
+                 AND (created_at >= ?3 OR status IN ('WAITING', 'IN_SERVICE'))",
+                params![number, sequence, epoch],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if exists.is_none() {
+            let now = now_iso();
+            tx.execute(
+                "INSERT INTO tickets (ticket_number, sequence, status, bay_id, created_at, is_priority)
+                 VALUES (?1, ?2, 'WAITING', NULL, ?3, 1)",
+                params![number, sequence, now],
+            )?;
+            let id = tx.last_insert_rowid();
+            db::set_setting(&tx, "next_sequence", &(sequence + 1).to_string())?;
+            db::set_setting(
+                &tx,
+                "next_priority_sequence",
+                &(priority_sequence + 1).to_string(),
+            )?;
+            tx.commit()?;
+            return Ok(Ticket {
+                id,
+                ticket_number: number,
+                sequence,
+                status: "WAITING".into(),
+                bay_id: None,
+                created_at: now,
+                started_at: None,
+                completed_at: None,
+                cancelled_at: None,
+                is_priority: true,
+            });
+        }
+        sequence += 1;
+        priority_sequence += 1;
+        if sequence > settings.next_sequence + 10_000 {
+            return Err(AppError::msg("تعذر إنشاء رقم دور فريد"));
+        }
+    }
+}
 
 pub fn create_ticket_and_maybe_print<F>(
     conn: &mut Connection,
@@ -193,9 +290,34 @@ where
     })
 }
 
+pub fn create_priority_ticket_and_maybe_print<F>(
+    conn: &mut Connection,
+    printer: F,
+) -> AppResult<CreateTicketResult>
+where
+    F: FnOnce(&Ticket, &AppSettings) -> Result<(), String>,
+{
+    let mut ticket = create_priority_ticket(conn)?;
+
+    let settings = db::load_settings(conn)?;
+    if settings.auto_assign {
+        if let Ok(Some(ready_bay_id)) = first_ready_bay(conn) {
+            if let Ok(assigned) = assign_ticket_to_bay(conn, ticket.id, ready_bay_id) {
+                ticket = assigned;
+            }
+        }
+    }
+
+    let print_error = printer(&ticket, &settings).err();
+    Ok(CreateTicketResult {
+        ticket,
+        print_error,
+    })
+}
+
 pub fn first_ready_bay(conn: &Connection) -> AppResult<Option<i64>> {
     conn.query_row(
-        "SELECT id FROM bays WHERE status = 'READY' AND current_ticket_id IS NULL ORDER BY id ASC LIMIT 1",
+        "SELECT id FROM bays WHERE status = 'READY' AND current_ticket_id IS NULL AND active = 1 ORDER BY id ASC LIMIT 1",
         [],
         |row| row.get(0),
     )
@@ -229,7 +351,7 @@ pub fn set_bay_out_of_service(conn: &Connection, bay_id: i64, out_of_service: bo
         if settings.auto_assign {
             let next_waiting_id: Option<i64> = conn
                 .query_row(
-                    "SELECT id FROM tickets WHERE status = 'WAITING' ORDER BY sequence ASC LIMIT 1",
+                    "SELECT id FROM tickets WHERE status = 'WAITING' ORDER BY is_priority DESC, id ASC LIMIT 1",
                     [],
                     |row| row.get(0),
                 )
@@ -250,17 +372,12 @@ pub fn assign_ticket_to_bay(conn: &Connection, ticket_id: i64, bay_id: i64) -> A
         return Err(AppError::msg("لا يمكن تعيين دور مستخدم مسبقاً"));
     }
 
-    let bay_status: String = conn.query_row(
-        "SELECT status FROM bays WHERE id = ?1",
+    let (bay_status, current, active): (String, Option<i64>, bool) = conn.query_row(
+        "SELECT status, current_ticket_id, active FROM bays WHERE id = ?1",
         params![bay_id],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )?;
-    let current: Option<i64> = conn.query_row(
-        "SELECT current_ticket_id FROM bays WHERE id = ?1",
-        params![bay_id],
-        |row| row.get(0),
-    )?;
-    if bay_status != "READY" || current.is_some() {
+    if bay_status != "READY" || current.is_some() || !active {
         return Err(AppError::msg("الحفرة غير جاهزة (قد تكون خارج الخدمة أو مشغولة)"));
     }
 
@@ -284,7 +401,7 @@ pub fn call_next(conn: &Connection, bay_id: Option<i64>) -> AppResult<Ticket> {
     };
     let next_id: i64 = conn
         .query_row(
-            "SELECT id FROM tickets WHERE status = 'WAITING' ORDER BY sequence ASC LIMIT 1",
+            "SELECT id FROM tickets WHERE status = 'WAITING' ORDER BY is_priority DESC, id ASC LIMIT 1",
             [],
             |row| row.get(0),
         )
@@ -315,7 +432,7 @@ pub fn complete_ticket(conn: &Connection, ticket_id: i64) -> AppResult<Ticket> {
         if settings.auto_assign {
             let next_waiting_id: Option<i64> = conn
                 .query_row(
-                    "SELECT id FROM tickets WHERE status = 'WAITING' ORDER BY sequence ASC LIMIT 1",
+                    "SELECT id FROM tickets WHERE status = 'WAITING' ORDER BY is_priority DESC, id ASC LIMIT 1",
                     [],
                     |row| row.get(0),
                 )
@@ -420,10 +537,15 @@ pub fn update_settings(conn: &Connection, patch: &AppSettings) -> AppResult<AppS
     if patch.next_sequence < 1 {
         return Err(AppError::msg("رقم الدور الابتدائي غير صالح"));
     }
-    let max_seq: i64 = conn
-        .query_row("SELECT COALESCE(MAX(sequence), 0) FROM tickets", [], |row| {
-            row.get(0)
-        })?;
+    if patch.priority_enabled && patch.priority_suffix.trim().is_empty() {
+        return Err(AppError::msg("لا يمكن تفعيل دور الأولوية دون تحديد لاحقة"));
+    }
+    let epoch = numbering_epoch(conn)?;
+    let max_seq: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(sequence), 0) FROM tickets WHERE created_at >= ?1",
+        params![epoch],
+        |row| row.get(0),
+    )?;
     if patch.next_sequence <= max_seq {
         return Err(AppError::msg(format!(
             "لا يمكن تعيين الرقم التالي إلى {} لأنه مستخدم أو أصغر من آخر رقم ({max_seq})",
@@ -460,7 +582,99 @@ pub fn update_settings(conn: &Connection, patch: &AppSettings) -> AppResult<AppS
             .map(|v| v.to_string())
             .unwrap_or_default(),
     )?;
+    db::set_setting(conn, "logo_path", &patch.logo_path)?;
+    db::set_setting(
+        conn,
+        "number_format",
+        if patch.number_format == "ar" { "ar" } else { "en" },
+    )?;
+    db::set_setting(conn, "settings_password", &patch.settings_password)?;
+    db::set_setting(
+        conn,
+        "priority_enabled",
+        if patch.priority_enabled { "true" } else { "false" },
+    )?;
+    db::set_setting(conn, "priority_suffix", &patch.priority_suffix)?;
+    db::set_setting(
+        conn,
+        "waiting_layout",
+        if patch.waiting_layout == "table" { "table" } else { "cards" },
+    )?;
+    db::set_setting(
+        conn,
+        "setup_completed",
+        if patch.setup_completed { "true" } else { "false" },
+    )?;
     db::load_settings(conn)
+}
+
+pub fn rename_bay(conn: &Connection, bay_id: i64, name: &str) -> AppResult<Bay> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::msg("اسم الحفرة لا يمكن أن يكون فارغًا"));
+    }
+    let updated = conn.execute(
+        "UPDATE bays SET name = ?1 WHERE id = ?2",
+        params![trimmed, bay_id],
+    )?;
+    if updated == 0 {
+        return Err(AppError::msg("الحفرة غير موجودة"));
+    }
+    list_bays(conn)?
+        .into_iter()
+        .find(|bay| bay.id == bay_id)
+        .ok_or_else(|| AppError::msg("الحفرة غير موجودة"))
+}
+
+pub fn add_bay(conn: &Connection, name: &str) -> AppResult<Bay> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::msg("اسم الحفرة لا يمكن أن يكون فارغًا"));
+    }
+    let next_id: i64 = conn.query_row("SELECT COALESCE(MAX(id), 0) + 1 FROM bays", [], |row| row.get(0))?;
+    conn.execute(
+        "INSERT INTO bays (id, name, status, current_ticket_id, active) VALUES (?1, ?2, 'READY', NULL, 1)",
+        params![next_id, trimmed],
+    )?;
+    list_bays(conn)?
+        .into_iter()
+        .find(|bay| bay.id == next_id)
+        .ok_or_else(|| AppError::msg("تعذر إنشاء الحفرة"))
+}
+
+pub fn set_bay_active(conn: &Connection, bay_id: i64, active: bool) -> AppResult<Bay> {
+    let current_ticket_id: Option<i64> = conn.query_row(
+        "SELECT current_ticket_id FROM bays WHERE id = ?1",
+        params![bay_id],
+        |row| row.get(0),
+    )?;
+
+    if !active {
+        if current_ticket_id.is_some() {
+            return Err(AppError::msg(
+                "لا يمكن حذف حفرة مشغولة بدور حالياً. أنهِ الدور أولاً.",
+            ));
+        }
+        let active_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM bays WHERE active = 1",
+            [],
+            |row| row.get(0),
+        )?;
+        if active_count <= 1 {
+            return Err(AppError::msg("يجب إبقاء حفرة واحدة نشطة على الأقل"));
+        }
+        conn.execute("UPDATE bays SET active = 0 WHERE id = ?1", params![bay_id])?;
+    } else {
+        conn.execute(
+            "UPDATE bays SET active = 1, status = 'READY' WHERE id = ?1",
+            params![bay_id],
+        )?;
+    }
+
+    list_bays(conn)?
+        .into_iter()
+        .find(|bay| bay.id == bay_id)
+        .ok_or_else(|| AppError::msg("الحفرة غير موجودة"))
 }
 
 pub fn daily_report(conn: &Connection, date: &str) -> AppResult<DailyReport> {

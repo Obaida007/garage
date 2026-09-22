@@ -50,7 +50,7 @@ export function playChime() {
   }
 }
 
-export function speakTicketCall(ticketNumber: string, bayId: number | string) {
+export function speakTicketCall(ticketNumber: string, bayLabel: string) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) {
     console.warn("Speech synthesis is not supported in this environment");
     return;
@@ -66,8 +66,8 @@ export function speakTicketCall(ticketNumber: string, bayId: number | string) {
   const ticketNumeric = parseInt(ticketNumber, 10);
   const ticketSpoken = isNaN(ticketNumeric) ? ticketNumber : ticketNumeric;
 
-  // Format text: "الزبون رقم [رقم الزبون] إلى الحفرة [رقم الحفرة]"
-  const text = `الزبون رقم ${ticketSpoken} إلى الحفرة ${bayId}`;
+  // Format text: "الزبون رقم [رقم الزبون] إلى [اسم الحفرة/النافذة]"
+  const text = `الزبون رقم ${ticketSpoken} إلى ${bayLabel}`;
 
   // Delay speech slightly to let chime play cleanly
   setTimeout(() => {

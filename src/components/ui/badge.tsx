@@ -5,12 +5,15 @@ export function Badge({
   className,
   variant = "default",
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & { variant?: "default" | "ready" | "busy" | "muted" }) {
+}: React.HTMLAttributes<HTMLDivElement> & {
+  variant?: "default" | "ready" | "busy" | "muted" | "warning";
+}) {
   const styles = {
     default: "bg-primary text-primary-foreground",
     ready: "bg-emerald-100 text-emerald-800",
     busy: "bg-red-100 text-red-800",
     muted: "bg-slate-100 text-slate-700",
+    warning: "bg-amber-100 text-amber-800",
   };
   return (
     <div

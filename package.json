@@ -1,8 +1,8 @@
 {
-  "name": "al-baroudi-garage",
+  "name": "OS Tickets",
   "private": true,
   "version": "1.0.0",
-  "description": "Al-Baroudi Garage queue management for car oil change",
+  "description": "OS Tickets queue management for car oil change",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -1,9 +1,12 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { AlertTriangle, Zap } from "lucide-react";
 import { BayGrid } from "@/features/cashier/BayGrid";
 import { QueuePanel } from "@/features/cashier/QueuePanel";
 import { RecoveryDialog } from "@/features/cashier/RecoveryDialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -31,7 +34,7 @@ export function CashierPage() {
   const [togglingMode, setTogglingMode] = useState(false);
 
   const readyBays = useMemo(
-    () => snapshot?.bays.filter((b) => b.status === "READY") ?? [],
+    () => snapshot?.bays.filter((b) => b.status === "READY" && b.active) ?? [],
     [snapshot],
   );
 
@@ -71,12 +74,32 @@ export function CashierPage() {
     }
   }
 
+  async function createPriorityTicket() {
+    try {
+      const result = await api.createPriorityTicket();
+      if (result.printError) {
+        toast.error(
+          `${t(locale, "printFailed")} ${result.ticket.ticketNumber}: ${result.printError}`,
+        );
+      } else {
+        toast.success(
+          `${t(locale, "ticketCreated")} ${result.ticket.ticketNumber}`,
+        );
+      }
+    } catch (error) {
+      toast.error(String(error));
+    }
+  }
+
+  function bayLabel(bayId: number | null) {
+    const found = snapshot?.bays.find((b) => b.id === bayId);
+    return found?.name || `${t(locale, "bay")} ${bayId}`;
+  }
+
   async function callNext(bayId?: number) {
     try {
       const ticket = await api.callNext(bayId);
-      toast.success(
-        `${ticket.ticketNumber} → ${t(locale, "bay")} ${ticket.bayId}`,
-      );
+      toast.success(`${ticket.ticketNumber} → ${bayLabel(ticket.bayId)}`);
       // Announcement fired automatically by garageStore on snapshot diff
     } catch (error) {
       toast.error(String(error));
@@ -88,8 +111,8 @@ export function CashierPage() {
       await api.setBayOutOfService(bayId, outOfService);
       toast.success(
         outOfService
-          ? `تم تعطيل حفرة ${bayId} (خارج الخدمة)`
-          : `تم تنشيط حفرة ${bayId} (جاهزة لاستقبال الأدوار)`,
+          ? `تم تعطيل ${bayLabel(bayId)} (خارج الخدمة)`
+          : `تم تنشيط ${bayLabel(bayId)} (جاهزة لاستقبال الأدوار)`,
       );
     } catch (error) {
       toast.error(String(error));
@@ -121,6 +144,17 @@ export function CashierPage() {
           {t(locale, "newTicket")}
         </Button>
 
+        {snapshot.settings.priorityEnabled && (
+          <Button
+            size="xl"
+            variant="warning"
+            onClick={() => void createPriorityTicket()}
+          >
+            <Zap className="h-5 w-5" />
+            {t(locale, "newPriorityTicket")}
+          </Button>
+        )}
+
         {/* In manual mode the global "call next" button is the primary action */}
         {!autoAssign && (
           <Button size="xl" variant="success" onClick={() => void callNext()}>
@@ -128,37 +162,27 @@ export function CashierPage() {
           </Button>
         )}
 
-        {/* ── Mode toggle pill ── */}
-        <button
-          onClick={() => void toggleAssignMode()}
-          disabled={togglingMode}
+        {/* ── Mode toggle ── */}
+        <div
+          className="flex items-center gap-3 rounded-lg border bg-white px-4 py-2.5 shadow-sm"
           title={
             autoAssign
               ? t(locale, "autoAssignDesc")
               : t(locale, "manualAssignDesc")
           }
-          className={[
-            "flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold shadow transition-all select-none",
-            autoAssign
-              ? "border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-              : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100",
-            togglingMode ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
-          ].join(" ")}
         >
-          <span
-            className={[
-              "inline-block h-2.5 w-2.5 rounded-full",
-              autoAssign ? "bg-emerald-500" : "bg-amber-500",
-            ].join(" ")}
-          />
-          <span>{t(locale, "callMode")}:</span>
-          <span className="font-extrabold">
-            {autoAssign
-              ? t(locale, "autoAssignAuto")
-              : t(locale, "autoAssignManual")}
+          <Label className="text-sm font-bold text-muted-foreground">
+            {t(locale, "callMode")}
+          </Label>
+          <span className="text-sm font-extrabold">
+            {autoAssign ? t(locale, "autoAssignAuto") : t(locale, "autoAssignManual")}
           </span>
-          <span className="opacity-40">⇄</span>
-        </button>
+          <Switch
+            checked={autoAssign}
+            disabled={togglingMode}
+            onCheckedChange={() => void toggleAssignMode()}
+          />
+        </div>
 
         <div className="ms-auto rounded-xl bg-white px-5 py-3 text-xl font-black shadow">
           {t(locale, "waiting")}: {snapshot.waitingCount}
@@ -168,7 +192,7 @@ export function CashierPage() {
       {/* ── Manual mode warning banner ── */}
       {!autoAssign && (
         <div className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <span className="text-lg">⚠️</span>
+          <AlertTriangle className="h-5 w-5 shrink-0" />
           <div>
             <span className="font-bold">وضع يدوي: </span>
             {t(locale, "manualAssignDesc")}
@@ -176,35 +200,40 @@ export function CashierPage() {
         </div>
       )}
 
-      <div className="flex gap-2 flex-wrap">
-        <BayGrid
-          bays={snapshot.bays}
-          locale={locale}
-          autoAssign={autoAssign}
-          onComplete={(id) => setConfirm({ type: "complete", id })}
-          onCallHere={(id) => void callNext(id)}
-          onCancel={(id) => setConfirm({ type: "cancel", id })}
-          onToggleOutOfService={(id, val) => void toggleOutOfService(id, val)}
-        />
-        <QueuePanel
-          waiting={snapshot.waiting}
-          locale={locale}
-          onReprint={async (id) => {
-            try {
-              await api.reprint(id);
-              toast.success(t(locale, "reprint"));
-            } catch (error) {
-              toast.error(String(error));
-            }
-          }}
-          onCancel={(id) => setConfirm({ type: "cancel", id })}
-          onAssign={setAssignTicketId}
-        />
+      <div className="flex gap-4 items-start flex-wrap lg:flex-nowrap">
+        <div className="min-w-0 flex-1">
+          <BayGrid
+            bays={snapshot.bays.filter((b) => b.active)}
+            locale={locale}
+            autoAssign={autoAssign}
+            onComplete={(id) => setConfirm({ type: "complete", id })}
+            onCallHere={(id) => void callNext(id)}
+            onCancel={(id) => setConfirm({ type: "cancel", id })}
+            onToggleOutOfService={(id, val) => void toggleOutOfService(id, val)}
+          />
+        </div>
+        <div className="w-full shrink-0 lg:w-[380px]">
+          <QueuePanel
+            waiting={snapshot.waiting}
+            locale={locale}
+            onReprint={async (id) => {
+              try {
+                await api.reprint(id);
+                toast.success(t(locale, "reprint"));
+              } catch (error) {
+                toast.error(String(error));
+              }
+            }}
+            onCancel={(id) => setConfirm({ type: "cancel", id })}
+            onAssign={setAssignTicketId}
+          />
+        </div>
       </div>
 
       <RecoveryDialog
         open={recoveryOpen && snapshot.needsRecovery}
         tickets={snapshot.inService}
+        bays={snapshot.bays}
         locale={locale}
         onComplete={async (id) => {
           try {
@@ -254,7 +283,7 @@ export function CashierPage() {
                     }
                   }}
                 >
-                  {t(locale, "bay")} {bay.id}
+                  {bay.name || `${t(locale, "bay")} ${bay.id}`}
                 </Button>
               ))
             )}

@@ -9,7 +9,10 @@ type GarageStore = {
   snapshot: GarageSnapshot | null;
   loading: boolean;
   error: string | null;
+  settingsUnlocked: boolean;
   setLocale: (locale: Locale) => void;
+  unlockSettings: () => void;
+  lockSettings: () => void;
   refresh: () => Promise<void>;
   start: () => Promise<() => void>;
 };
@@ -19,6 +22,9 @@ export const useGarageStore = create<GarageStore>((set, get) => ({
   snapshot: null,
   loading: true,
   error: null,
+  settingsUnlocked: false,
+  unlockSettings: () => set({ settingsUnlocked: true }),
+  lockSettings: () => set({ settingsUnlocked: false }),
   setLocale: (locale) => {
     set({ locale });
     document.documentElement.lang = locale;
@@ -35,19 +41,19 @@ export const useGarageStore = create<GarageStore>((set, get) => ({
       if (errorMsg.includes("invoke") || errorMsg.includes("window.__TAURI_IPC__")) {
         const demoSnapshot: GarageSnapshot = {
           bays: [
-            { id: 1, name: "حفرة 1", status: "BUSY", currentTicketId: 1, currentTicket: { id: 1, ticketNumber: "001", sequence: 1, status: "IN_SERVICE", bayId: 1, createdAt: "", startedAt: null, completedAt: null, cancelledAt: null } },
-            { id: 2, name: "حفرة 2", status: "BUSY", currentTicketId: 2, currentTicket: { id: 2, ticketNumber: "002", sequence: 2, status: "IN_SERVICE", bayId: 2, createdAt: "", startedAt: null, completedAt: null, cancelledAt: null } },
-            { id: 3, name: "حفرة 3", status: "READY", currentTicketId: null, currentTicket: null },
-            { id: 4, name: "حفرة 4", status: "BUSY", currentTicketId: 3, currentTicket: { id: 3, ticketNumber: "004", sequence: 4, status: "IN_SERVICE", bayId: 4, createdAt: "", startedAt: null, completedAt: null, cancelledAt: null } },
-            { id: 5, name: "حفرة 5", status: "READY", currentTicketId: null, currentTicket: null },
-            { id: 6, name: "حفرة 6", status: "READY", currentTicketId: null, currentTicket: null },
+            { id: 1, name: "حفرة 1", status: "BUSY", currentTicketId: 1, currentTicket: { id: 1, ticketNumber: "001", sequence: 1, status: "IN_SERVICE", bayId: 1, createdAt: "", startedAt: null, completedAt: null, cancelledAt: null, isPriority: false }, active: true },
+            { id: 2, name: "حفرة 2", status: "BUSY", currentTicketId: 2, currentTicket: { id: 2, ticketNumber: "002", sequence: 2, status: "IN_SERVICE", bayId: 2, createdAt: "", startedAt: null, completedAt: null, cancelledAt: null, isPriority: false }, active: true },
+            { id: 3, name: "حفرة 3", status: "READY", currentTicketId: null, currentTicket: null, active: true },
+            { id: 4, name: "حفرة 4", status: "BUSY", currentTicketId: 3, currentTicket: { id: 3, ticketNumber: "004", sequence: 4, status: "IN_SERVICE", bayId: 4, createdAt: "", startedAt: null, completedAt: null, cancelledAt: null, isPriority: false }, active: true },
+            { id: 5, name: "حفرة 5", status: "READY", currentTicketId: null, currentTicket: null, active: true },
+            { id: 6, name: "حفرة 6", status: "READY", currentTicketId: null, currentTicket: null, active: true },
           ],
           waiting: [],
           inService: [],
-          settings: { garageName: "كراج البارودي", printHeader: "", ticketPrefix: "", nextSequence: 5, printerName: "", paperWidthMm: 80, waitingMonitorId: "", waitingFullscreen: true, lastCalledTicketId: null, autoAssign: true },
+          settings: { garageName: "OS Tickets", printHeader: "", ticketPrefix: "", nextSequence: 5, printerName: "", paperWidthMm: 80, waitingMonitorId: "", waitingFullscreen: true, lastCalledTicketId: null, autoAssign: true, lastResetDate: "", logoPath: "", numberFormat: "en", settingsPassword: "", priorityEnabled: false, prioritySuffix: "A", nextPrioritySequence: 1, setupCompleted: true, waitingLayout: "cards" },
           waitingCount: 3,
           board: {
-            garageName: "كراج البارودي",
+            garageName: "OS Tickets",
             currentTicket: "004",
             currentBay: 4,
             nextTicket: "005",
@@ -89,7 +95,7 @@ export const useGarageStore = create<GarageStore>((set, get) => ({
             newTicketId !== prevTicketId &&
             newBay.currentTicket
           ) {
-            speakTicketCall(newBay.currentTicket.ticketNumber, newBay.id);
+            speakTicketCall(newBay.currentTicket.ticketNumber, newBay.name);
           }
         }
       }

@@ -1,5 +1,8 @@
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
+#[cfg(windows)]
+use crate::error::AppError;
 use crate::models::{AppSettings, PrinterInfo, Ticket};
+use crate::ticket_layout::{self, Layout};
 
 pub fn list_printers() -> AppResult<Vec<PrinterInfo>> {
     #[cfg(windows)]
@@ -9,24 +12,53 @@ pub fn list_printers() -> AppResult<Vec<PrinterInfo>> {
 
     #[cfg(not(windows))]
     {
-        Ok(Vec::new())
+        crate::printing_cups::list_printers()
     }
 }
 
 pub fn print_ticket(ticket: &Ticket, settings: &AppSettings) -> Result<(), String> {
+    let layout = ticket_layout::build(ticket, settings);
+    let logo = load_logo(settings);
+    submit(&layout, logo.as_ref(), settings)
+}
+
+fn submit(
+    layout: &Layout,
+    logo: Option<&image::RgbImage>,
+    settings: &AppSettings,
+) -> Result<(), String> {
     #[cfg(windows)]
     {
-        windows_print::print_ticket(ticket, settings)
+        windows_print::print(layout, logo, settings)
     }
 
     #[cfg(not(windows))]
     {
-        let _ = (ticket, settings);
-        Err("الطباعة متاحة على Windows فقط".into())
+        crate::printing_cups::print(layout, logo, settings)
+    }
+}
+
+/// يحمّل اللوغو من الإعدادات. لا نُفشل الطباعة إن تعذّر تحميله،
+/// لكن نسجّل السبب بدل تجاهله بصمت.
+fn load_logo(settings: &AppSettings) -> Option<image::RgbImage> {
+    if settings.logo_path.trim().is_empty() {
+        return None;
+    }
+    match ticket_layout::load_logo(&settings.logo_path) {
+        Ok(logo) => Some(logo),
+        Err(err) => {
+            eprintln!("تحذير: لم تُطبَع صورة اللوغو - {err}");
+            None
+        }
     }
 }
 
 pub fn test_print(settings: &AppSettings) -> Result<(), String> {
+    // نتحقق من اللوغو هنا حتى يظهر سببه للمستخدم مباشرة عند اختبار الطباعة.
+    if !settings.logo_path.trim().is_empty() {
+        ticket_layout::load_logo(&settings.logo_path)?;
+    }
+
     let sample = Ticket {
         id: 0,
         ticket_number: format_ticket_sample(settings),
@@ -37,6 +69,7 @@ pub fn test_print(settings: &AppSettings) -> Result<(), String> {
         started_at: None,
         completed_at: None,
         cancelled_at: None,
+        is_priority: false,
     };
 
     print_ticket(&sample, settings)
@@ -64,9 +97,13 @@ mod windows_print {
         SelectObject,
         SetBkMode,
         SetTextColor,
+        StretchDIBits,
+        BITMAPINFO,
+        BITMAPINFOHEADER,
         CLEARTYPE_QUALITY,
         CLIP_DEFAULT_PRECIS,
         DEFAULT_PITCH,
+        DIB_RGB_COLORS,
         DT_CENTER,
         DT_RTLREADING,
         DT_WORDBREAK,
@@ -76,8 +113,8 @@ mod windows_print {
         HGDIOBJ,
         HORZRES,
         OUT_TT_PRECIS,
+        SRCCOPY,
         TRANSPARENT,
-        VERTRES,
         FONT_CHARSET,
         FONT_CLIP_PRECISION,
         FONT_OUTPUT_PRECISION,
@@ -180,8 +217,9 @@ mod windows_print {
         }
     }
 
-    pub fn print_ticket(
-        ticket: &Ticket,
+    pub fn print(
+        layout: &Layout,
+        logo: Option<&image::RgbImage>,
         settings: &AppSettings,
     ) -> Result<(), String> {
         unsafe {
@@ -240,71 +278,30 @@ mod windows_print {
             }
 
             let width = GetDeviceCaps(Some(hdc), HORZRES);
-            let height = GetDeviceCaps(Some(hdc), VERTRES);
-
-            // paper_width_mm is currently used by the caller/settings layer.
-            // Keep it here so the existing settings contract remains unchanged.
-            let _ = (settings.paper_width_mm, height);
 
             SetBkMode(hdc, TRANSPARENT);
-SetTextColor(
-    hdc,
-    windows::Win32::Foundation::COLORREF(rgb(0, 0, 0)),
-);
-            let mut y = 40;
-
-            y += draw_line(
+            SetTextColor(
                 hdc,
-                width,
-                y,
-                48,
-                true,
-                &settings.print_header,
+                windows::Win32::Foundation::COLORREF(rgb(0, 0, 0)),
             );
 
-            y += 16;
+            let mut y = 5;
 
-            y += draw_line(
-                hdc,
-                width,
-                y,
-                32,
-                false,
-                "رقم الدور",
-            );
+            if let Some(logo) = logo {
+                y += draw_logo(hdc, width, y, logo);
+            }
 
-            y += 8;
-
-            y += draw_line(
-                hdc,
-                width,
-                y,
-                96,
-                true,
-                &ticket.ticket_number,
-            );
-
-            y += 24;
-
-            y += draw_line(
-                hdc,
-                width,
-                y,
-                28,
-                false,
-                "الرجاء انتظار دوركم",
-            );
-
-            y += 12;
-
-            y += draw_line(
-                hdc,
-                width,
-                y,
-                26,
-                false,
-                "شكراً لزيارتكم",
-            );
+            for line in &layout.lines {
+                y += line.space_before;
+                y += draw_line(
+                    hdc,
+                    width,
+                    y,
+                    line.size,
+                    line.bold,
+                    &line.text,
+                );
+            }
 
             let _ = y;
 
@@ -329,6 +326,61 @@ SetTextColor(
 
             Ok(())
         }
+    }
+
+    /// Decodes the logo image and blits it centered at the top of the ticket.
+    /// Returns the vertical space consumed (0 if there is no logo, so a missing
+    /// logo never aborts the print job).
+    unsafe fn draw_logo(hdc: HDC, page_width: i32, y: i32, img: &image::RgbImage) -> i32 {
+        let (src_w, src_h) = img.dimensions();
+        if src_w == 0 || src_h == 0 {
+            return 0;
+        }
+
+        let max_w = (page_width - 10).max(1) as f64;
+        let max_h = 150.0f64;
+        let scale = (max_w / src_w as f64).min(max_h / src_h as f64).min(1.0);
+        let dest_w = ((src_w as f64) * scale).round().max(1.0) as i32;
+        let dest_h = ((src_h as f64) * scale).round().max(1.0) as i32;
+
+        // Bottom-up 24bpp BGR DIB, rows padded to a 4-byte boundary.
+        let row_stride = (((src_w * 3) + 3) / 4) * 4;
+        let mut bits = vec![0u8; (row_stride * src_h) as usize];
+        for (px, py, pixel) in img.enumerate_pixels() {
+            let dest_row = src_h - 1 - py;
+            let offset = (dest_row * row_stride + px * 3) as usize;
+            bits[offset] = pixel[2];
+            bits[offset + 1] = pixel[1];
+            bits[offset + 2] = pixel[0];
+        }
+
+        let mut bmi: BITMAPINFO = std::mem::zeroed();
+        bmi.bmiHeader.biSize = size_of::<BITMAPINFOHEADER>() as u32;
+        bmi.bmiHeader.biWidth = src_w as i32;
+        bmi.bmiHeader.biHeight = src_h as i32;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 24;
+        bmi.bmiHeader.biCompression = 0;
+
+        let x = ((page_width - dest_w) / 2).max(0);
+
+        let _ = StretchDIBits(
+            hdc,
+            x,
+            y,
+            dest_w,
+            dest_h,
+            0,
+            0,
+            src_w as i32,
+            src_h as i32,
+            Some(bits.as_ptr() as *const core::ffi::c_void),
+            &bmi,
+            DIB_RGB_COLORS,
+            SRCCOPY,
+        );
+
+        dest_h + 5
     }
 
     unsafe fn draw_line(
@@ -365,7 +417,7 @@ SetTextColor(
         );
 
         if font.is_invalid() {
-            return size + 28;
+            return size + 6;
         }
 
         let old = SelectObject(hdc, HGDIOBJ(font.0));
@@ -373,10 +425,10 @@ SetTextColor(
         let mut wide: Vec<u16> = text.encode_utf16().collect();
 
         let mut rect = windows::Win32::Foundation::RECT {
-            left: 20,
+            left: 5,
             top: y,
-            right: page_width.saturating_sub(20),
-            bottom: y + size + 24,
+            right: page_width.saturating_sub(5),
+            bottom: y + size + 12,
         };
 
         let _ = DrawTextW(
@@ -390,7 +442,7 @@ SetTextColor(
 
         let _ = DeleteObject(HGDIOBJ(font.0));
 
-        size + 28
+        size + 6
     }
 
     fn resolve_printer(configured: &str) -> Result<String, String> {

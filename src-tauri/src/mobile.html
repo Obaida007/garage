@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>OS Tickets</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;overflow:hidden}
+    body{font-family:system-ui,-apple-system,'Segoe UI',Arial,sans-serif;background:#f1f5f9;display:flex;flex-direction:column;height:100dvh}
+
+    /* ─── Header ─── */
+    header{background:#fff;border-bottom:2px solid #e2e8f0;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px}
+    .h-left{display:flex;align-items:center;gap:10px}
+    .dot{width:11px;height:11px;border-radius:50%;background:#22c55e;flex-shrink:0;transition:background .3s}
+    .dot.off{background:#ef4444}
+    .garage-name{font-size:18px;font-weight:900;color:#0f172a}
+    .h-right{display:flex;align-items:center;gap:10px}
+    .waiting-pill{background:#0f172a;color:#fff;border-radius:100px;padding:4px 14px;font-size:13px;font-weight:700;white-space:nowrap}
+    .btn-settings{background:none;border:none;cursor:pointer;padding:6px;border-radius:8px;font-size:22px;line-height:1;color:#475569}
+
+    /* ─── Kiosk ─── */
+    #kioskView{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 20px;gap:28px;overflow:hidden}
+    .last-card{background:#fff;border:2px solid #e2e8f0;border-radius:20px;padding:18px 36px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+    .last-label{font-size:13px;color:#64748b;font-weight:600;margin-bottom:4px}
+    .last-num{font-size:64px;font-weight:900;color:#0f172a;line-height:1}
+    .btn-new{width:100%;max-width:340px;height:130px;background:#0f172a;color:#fff;border:none;border-radius:24px;font-size:34px;font-weight:900;cursor:pointer;box-shadow:0 8px 32px rgba(15,23,42,.28);transition:transform .12s,background .15s;display:flex;align-items:center;justify-content:center;gap:10px}
+    .btn-new:active{transform:scale(.95)}
+    .btn-new:disabled{background:#94a3b8;box-shadow:none;cursor:default}
+    .kiosk-wait{font-size:15px;font-weight:600;color:#64748b}
+
+    /* ─── Manager ─── */
+    #managerView{flex:1;display:none;flex-direction:column;overflow:hidden}
+    #managerView.show{display:flex}
+    .tabs{background:#fff;border-bottom:2px solid #e2e8f0;display:flex;flex-shrink:0}
+    .tab{flex:1;padding:14px;text-align:center;font-weight:700;font-size:15px;color:#64748b;border-bottom:3px solid transparent;cursor:pointer;transition:color .15s,border-color .15s}
+    .tab.active{color:#0f172a;border-bottom-color:#0f172a}
+    .tab-body{flex:1;overflow-y:auto;padding:14px}
+    .action-bar{background:#fff;border-top:2px solid #e2e8f0;padding:12px 14px;display:flex;gap:8px;flex-shrink:0}
+    .btn-sm{height:50px;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .1s}
+    .btn-sm:active{opacity:.7}
+    .btn-new-sm{flex:2;background:#0f172a;color:#fff}
+    .btn-call-sm{flex:1;background:#22c55e;color:#fff}
+    .btn-logout{flex:0 0 50px;background:none;border:2px solid #e2e8f0;border-radius:12px;font-size:20px;cursor:pointer}
+
+    /* Bay cards */
+    .bay-card{background:#fff;border:2px solid #e2e8f0;border-radius:16px;padding:14px;margin-bottom:12px}
+    .bay-card.busy{border-color:#f59e0b}
+    .bay-card.out{opacity:.5}
+    .bay-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+    .bay-name{font-size:17px;font-weight:800;color:#0f172a}
+    .badge{padding:4px 12px;border-radius:100px;font-size:12px;font-weight:700}
+    .badge-busy{background:#fef3c7;color:#78350f}
+    .badge-ready{background:#dcfce7;color:#14532d}
+    .badge-out{background:#f1f5f9;color:#64748b}
+    .bay-tkt{font-size:52px;font-weight:900;color:#0f172a;line-height:1;margin-bottom:10px}
+    .bay-btns{display:flex;gap:8px}
+    .btn-complete{flex:1;height:44px;background:#0f172a;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer}
+    .btn-cancel{flex:1;height:44px;background:#ef4444;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer}
+    .btn-call-here{width:100%;height:44px;background:#22c55e;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer}
+
+    /* Queue */
+    .q-item{background:#fff;border:2px solid #e2e8f0;border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+    .q-num{font-size:28px;font-weight:900;color:#0f172a}
+    .q-time{font-size:13px;color:#64748b}
+    .priority-pip{background:#fef3c7;color:#78350f;border-radius:100px;padding:2px 9px;font-size:11px;font-weight:700;margin-left:6px}
+
+    /* Auth overlay */
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:flex-end;justify-content:center;z-index:200;padding-bottom:0}
+    .overlay.show{display:flex}
+    .auth-card{background:#fff;border-radius:24px 24px 0 0;padding:28px 24px 32px;width:100%;max-width:480px}
+    .auth-title{font-size:19px;font-weight:900;color:#0f172a;margin-bottom:16px;text-align:center}
+    .auth-input{width:100%;height:52px;border:2px solid #e2e8f0;border-radius:12px;padding:0 16px;font-size:18px;text-align:center;margin-bottom:8px;outline:none}
+    .auth-input:focus{border-color:#0f172a}
+    .auth-err{color:#ef4444;font-size:13px;text-align:center;min-height:18px;margin-bottom:8px}
+    .btn-unlock{width:100%;height:52px;background:#0f172a;color:#fff;border:none;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;margin-bottom:10px}
+    .btn-close{width:100%;height:44px;background:none;color:#64748b;border:2px solid #e2e8f0;border-radius:12px;font-size:15px;cursor:pointer}
+
+    /* Toast */
+    .toast{position:fixed;bottom:90px;left:16px;right:16px;background:#ef4444;color:#fff;padding:14px 18px;border-radius:14px;font-weight:700;text-align:center;z-index:300;display:none;font-size:15px}
+    .toast.show{display:block}
+    .toast.ok{background:#22c55e}
+
+    /* Spinner */
+    .spin{display:inline-block;width:28px;height:28px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+    @keyframes sp{to{transform:rotate(360deg)}}
+
+    .empty{text-align:center;padding:40px 20px;color:#94a3b8;font-size:15px}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="h-left">
+    <span id="dot" class="dot off"></span>
+    <span id="garageName" class="garage-name">OS Tickets</span>
+  </div>
+  <div class="h-right">
+    <span id="waitPill" class="waiting-pill" style="display:none"></span>
+    <button class="btn-settings" id="btnSettings" title="الكاشير">⚙</button>
+  </div>
+</header>
+
+<!-- Kiosk view (default) -->
+<div id="kioskView">
+  <div id="lastCard" class="last-card" style="display:none">
+    <div class="last-label">آخر دور صدر</div>
+    <div id="lastNum" class="last-num">—</div>
+  </div>
+  <button id="btnNew" class="btn-new" onclick="createTicket()">
+    دور جديد
+  </button>
+  <div id="kioskWait" class="kiosk-wait"></div>
+</div>
+
+<!-- Manager view -->
+<div id="managerView">
+  <div class="tabs">
+    <div class="tab active" id="tabBays" onclick="switchTab('bays')">الحفر</div>
+    <div class="tab" id="tabQueue" onclick="switchTab('queue')">الطابور</div>
+  </div>
+  <div id="baysBody" class="tab-body"></div>
+  <div id="queueBody" class="tab-body" style="display:none"></div>
+  <div class="action-bar">
+    <button class="btn-sm btn-new-sm" onclick="createTicket()">+ دور جديد</button>
+    <button class="btn-sm btn-call-sm" onclick="callNext()">استدعاء</button>
+    <button class="btn-logout" onclick="doLogout()" title="خروج">🔓</button>
+  </div>
+</div>
+
+<!-- Auth overlay -->
+<div id="overlay" class="overlay">
+  <div class="auth-card">
+    <div class="auth-title">دخول الكاشير</div>
+    <input id="pwdInput" class="auth-input" type="password" placeholder="كلمة المرور" autocomplete="current-password">
+    <div id="authErr" class="auth-err"></div>
+    <button class="btn-unlock" onclick="submitAuth()">دخول</button>
+    <button class="btn-close" onclick="closeOverlay()">إلغاء</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<script>
+  const BASE = location.origin;
+  let snap = null;
+  let token = sessionStorage.getItem('t') || null;
+  let pollTimer = null;
+
+  /* ── Bootstrap ── */
+  async function boot() {
+    await poll();
+    startPoll();
+    if (token) showManager();
+  }
+
+  /* ── Polling ── */
+  function startPoll() {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(poll, 2000);
+  }
+
+  async function poll() {
+    try {
+      const headers = token ? { Authorization: 'Bearer ' + token } : {};
+      const r = await fetch(BASE + '/api/snapshot', { headers });
+      if (!r.ok) { setOffline(); return; }
+      snap = await r.json();
+      setOnline();
+      render();
+    } catch { setOffline(); }
+  }
+
+  function setOnline()  { document.getElementById('dot').classList.remove('off'); }
+  function setOffline() { document.getElementById('dot').classList.add('off'); }
+
+  /* ── Render ── */
+  function render() {
+    if (!snap) return;
+    document.getElementById('garageName').textContent = snap.settings?.garageName || 'OS Tickets';
+    const w = snap.waitingCount || 0;
+    const pill = document.getElementById('waitPill');
+    if (w > 0) { pill.textContent = w + ' منتظر'; pill.style.display = ''; }
+    else pill.style.display = 'none';
+    document.getElementById('kioskWait').textContent = w > 0 ? w + ' شخص في الانتظار' : 'لا يوجد منتظرون';
+    if (token) renderManager();
+  }
+
+  function renderManager() {
+    if (!snap) return;
+    const bays = (snap.bays || []).filter(b => b.active);
+    document.getElementById('baysBody').innerHTML = bays.length
+      ? bays.map(bayHtml).join('')
+      : '<div class="empty">لا توجد حفر نشطة</div>';
+
+    const waiting = snap.waiting || [];
+    document.getElementById('queueBody').innerHTML = waiting.length
+      ? waiting.map(qHtml).join('')
+      : '<div class="empty">الطابور فارغ</div>';
+  }
+
+  function bayHtml(b) {
+    const busy = b.status === 'BUSY' && b.currentTicket;
+    const out  = b.status === 'OUT_OF_SERVICE';
+    const t    = b.currentTicket;
+    return `<div class="bay-card ${busy?'busy':out?'out':''}">
+      <div class="bay-head">
+        <span class="bay-name">${esc(b.name)}</span>
+        <span class="badge ${busy?'badge-busy':out?'badge-out':'badge-ready'}">${busy?'قيد العمل':out?'خارج الخدمة':'جاهزة'}</span>
+      </div>
+      ${busy && t ? `
+        <div class="bay-tkt">${esc(t.ticketNumber)}</div>
+        <div class="bay-btns">
+          <button class="btn-complete" onclick="completeBay(${b.id})">إنهاء</button>
+          <button class="btn-cancel"   onclick="cancelTkt(${t.id})">إلغاء</button>
+        </div>` : out ? '' : `<button class="btn-call-here" onclick="callNext(${b.id})">استدعاء هنا</button>`}
+    </div>`;
+  }
+
+  function qHtml(t) {
+    return `<div class="q-item">
+      <div>${t.isPriority ? '<span class="priority-pip">أولوية</span>' : ''}<span class="q-num">${esc(t.ticketNumber)}</span></div>
+      <div class="q-time">${fmtTime(t.createdAt)}</div>
+    </div>`;
+  }
+
+  /* ── Create ticket ── */
+  async function createTicket() {
+    const btn = document.getElementById('btnNew');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>';
+    try {
+      const r = await fetch(BASE + '/api/ticket', { method: 'POST' });
+      if (!r.ok) { toast('فشل إنشاء الدور'); return; }
+      const d = await r.json();
+      const num = d.ticket?.ticketNumber;
+      if (num) {
+        document.getElementById('lastNum').textContent = num;
+        document.getElementById('lastCard').style.display = '';
+      }
+      if (d.printError) toast('تم إنشاء الدور — تعذرت الطباعة', true);
+      else toast('دور ' + (num||'') + ' تم إصداره', true);
+      await poll();
+    } catch { toast('تعذر الاتصال بالخادم'); }
+    finally { btn.disabled = false; btn.innerHTML = 'دور جديد'; }
+  }
+
+  /* ── Cashier actions ── */
+  async function callNext(bayId) {
+    const body = bayId ? JSON.stringify({ bayId }) : '{}';
+    const r = await authFetch('/api/call-next', { method: 'POST', body });
+    if (r === null) return;
+    if (!r.ok) { toast('لا يوجد دور في الطابور'); return; }
+    await poll();
+  }
+
+  async function completeBay(bayId) {
+    const r = await authFetch('/api/complete-bay/' + bayId, { method: 'POST' });
+    if (r === null) return;
+    if (!r.ok) { toast('فشل إنهاء الجلسة'); return; }
+    await poll();
+  }
+
+  async function cancelTkt(ticketId) {
+    if (!confirm('إلغاء هذا الدور؟')) return;
+    const r = await authFetch('/api/cancel/' + ticketId, { method: 'POST' });
+    if (r === null) return;
+    if (!r.ok) { toast('فشل الإلغاء'); return; }
+    await poll();
+  }
+
+  async function authFetch(path, opts) {
+    if (!token) { openOverlay(); return null; }
+    try {
+      return await fetch(BASE + path, {
+        ...opts,
+        headers: { ...opts.headers, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      });
+    } catch { toast('تعذر الاتصال'); return null; }
+  }
+
+  /* ── Auth ── */
+  document.getElementById('btnSettings').onclick = openOverlay;
+  document.getElementById('overlay').onclick = e => { if (e.target === e.currentTarget) closeOverlay(); };
+  document.getElementById('pwdInput').onkeydown = e => { if (e.key === 'Enter') submitAuth(); };
+
+  function openOverlay() {
+    document.getElementById('overlay').classList.add('show');
+    document.getElementById('pwdInput').value = '';
+    document.getElementById('authErr').textContent = '';
+    setTimeout(() => document.getElementById('pwdInput').focus(), 80);
+  }
+
+  function closeOverlay() { document.getElementById('overlay').classList.remove('show'); }
+
+  async function submitAuth() {
+    const pwd = document.getElementById('pwdInput').value;
+    try {
+      const r = await fetch(BASE + '/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pwd }),
+      });
+      if (r.status === 204) {
+        token = '__nopwd__';
+        sessionStorage.setItem('t', token);
+        closeOverlay(); showManager(); await poll(); return;
+      }
+      if (r.status === 401) { document.getElementById('authErr').textContent = 'كلمة المرور غير صحيحة'; return; }
+      if (!r.ok) { toast('خطأ في الخادم'); return; }
+      const d = await r.json();
+      token = d.token;
+      sessionStorage.setItem('t', token);
+      closeOverlay(); showManager(); await poll();
+    } catch { toast('تعذر الاتصال'); }
+  }
+
+  function doLogout() {
+    token = null;
+    sessionStorage.removeItem('t');
+    showKiosk();
+  }
+
+  /* ── View switching ── */
+  function showManager() {
+    document.getElementById('kioskView').style.display = 'none';
+    const mv = document.getElementById('managerView');
+    mv.classList.add('show');
+    renderManager();
+  }
+
+  function showKiosk() {
+    document.getElementById('kioskView').style.display = '';
+    document.getElementById('managerView').classList.remove('show');
+  }
+
+  function switchTab(name) {
+    document.getElementById('tabBays').classList.toggle('active',  name === 'bays');
+    document.getElementById('tabQueue').classList.toggle('active', name === 'queue');
+    document.getElementById('baysBody').style.display  = name === 'bays'  ? '' : 'none';
+    document.getElementById('queueBody').style.display = name === 'queue' ? '' : 'none';
+  }
+
+  /* ── Helpers ── */
+  function esc(s) {
+    return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '';
+    try {
+      // SQLite stores without timezone; treat as local
+      const d = new Date(iso.replace(' ', 'T'));
+      return d.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+    } catch { return ''; }
+  }
+
+  function toast(msg, ok) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show' + (ok ? ' ok' : '');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('show'), 2800);
+  }
+
+  boot();
+</script>
+</body>
+</html>
