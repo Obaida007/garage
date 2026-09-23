@@ -1,5 +1,5 @@
 use crate::error::{AppError, AppResult};
-use crate::models::{AppSettings, BAY_COUNT};
+use crate::models::{Ad, AppSettings, BAY_COUNT};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 
@@ -60,6 +60,15 @@ fn migrate(conn: &Connection) -> AppResult<()> {
         CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
         CREATE INDEX IF NOT EXISTS idx_tickets_created ON tickets(created_at);
         CREATE INDEX IF NOT EXISTS idx_tickets_number_created ON tickets(ticket_number, created_at);
+
+        CREATE TABLE IF NOT EXISTS ads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_path TEXT NOT NULL,
+            display_order INTEGER NOT NULL DEFAULT 0,
+            duration_secs INTEGER NOT NULL DEFAULT 10,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
         "#,
     )?;
 
@@ -187,6 +196,8 @@ fn seed_settings(conn: &Connection) -> AppResult<()> {
     set_if_missing(conn, "priority_enabled", "false")?;
     set_if_missing(conn, "priority_suffix", &defaults.priority_suffix)?;
     set_if_missing(conn, "next_priority_sequence", &defaults.next_priority_sequence.to_string())?;
+    set_if_missing(conn, "ads_enabled", "false")?;
+    set_if_missing(conn, "board_duration_secs", &defaults.board_duration_secs.to_string())?;
     Ok(())
 }
 
@@ -281,7 +292,95 @@ pub fn load_settings(conn: &Connection) -> AppResult<AppSettings> {
     if let Some(v) = get_setting(conn, "setup_completed")? {
         settings.setup_completed = v == "true" || v == "1";
     }
+    if let Some(v) = get_setting(conn, "ads_enabled")? {
+        settings.ads_enabled = v == "true" || v == "1";
+    }
+    if let Some(v) = get_setting(conn, "board_duration_secs")? {
+        settings.board_duration_secs = v.parse().unwrap_or(8).max(1);
+    }
     Ok(settings)
+}
+
+// ─── Ads CRUD ────────────────────────────────────────────────────────────────
+
+pub fn list_ads(conn: &Connection) -> AppResult<Vec<Ad>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, file_path, display_order, duration_secs, active \
+         FROM ads WHERE active = 1 ORDER BY display_order ASC, id ASC",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(Ad {
+            id: row.get(0)?,
+            file_path: row.get(1)?,
+            display_order: row.get(2)?,
+            duration_secs: row.get(3)?,
+            active: row.get::<_, i64>(4)? != 0,
+        })
+    })?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
+pub fn add_ad(conn: &Connection, file_path: &str, duration_secs: i64) -> AppResult<Ad> {
+    let next_order: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(display_order), -1) + 1 FROM ads WHERE active = 1",
+        [],
+        |row| row.get(0),
+    )?;
+    conn.execute(
+        "INSERT INTO ads (file_path, display_order, duration_secs, active) VALUES (?1, ?2, ?3, 1)",
+        params![file_path, next_order, duration_secs.max(1)],
+    )?;
+    let id = conn.last_insert_rowid();
+    Ok(Ad {
+        id,
+        file_path: file_path.to_string(),
+        display_order: next_order,
+        duration_secs: duration_secs.max(1),
+        active: true,
+    })
+}
+
+pub fn remove_ad(conn: &Connection, id: i64) -> AppResult<String> {
+    let file_path: String = conn
+        .query_row("SELECT file_path FROM ads WHERE id = ?1", params![id], |r| r.get(0))
+        .map_err(|_| AppError::msg("الإعلان غير موجود"))?;
+    conn.execute("DELETE FROM ads WHERE id = ?1", params![id])?;
+    Ok(file_path)
+}
+
+pub fn update_ad_duration(conn: &Connection, id: i64, duration_secs: i64) -> AppResult<Ad> {
+    let dur = duration_secs.max(1);
+    let updated = conn.execute(
+        "UPDATE ads SET duration_secs = ?1 WHERE id = ?2",
+        params![dur, id],
+    )?;
+    if updated == 0 {
+        return Err(AppError::msg("الإعلان غير موجود"));
+    }
+    conn.query_row(
+        "SELECT id, file_path, display_order, duration_secs, active FROM ads WHERE id = ?1",
+        params![id],
+        |row| {
+            Ok(Ad {
+                id: row.get(0)?,
+                file_path: row.get(1)?,
+                display_order: row.get(2)?,
+                duration_secs: row.get(3)?,
+                active: row.get::<_, i64>(4)? != 0,
+            })
+        },
+    )
+    .map_err(|e| AppError::msg(e.to_string()))
+}
+
+pub fn reorder_ads(conn: &Connection, ids: &[i64]) -> AppResult<()> {
+    for (order, id) in ids.iter().enumerate() {
+        conn.execute(
+            "UPDATE ads SET display_order = ?1 WHERE id = ?2",
+            params![order as i64, id],
+        )?;
+    }
+    Ok(())
 }
 
 pub fn vacuum_into(conn: &Connection, dest: &Path) -> AppResult<()> {

@@ -605,6 +605,16 @@ pub fn update_settings(conn: &Connection, patch: &AppSettings) -> AppResult<AppS
         "setup_completed",
         if patch.setup_completed { "true" } else { "false" },
     )?;
+    db::set_setting(
+        conn,
+        "ads_enabled",
+        if patch.ads_enabled { "true" } else { "false" },
+    )?;
+    db::set_setting(
+        conn,
+        "board_duration_secs",
+        &patch.board_duration_secs.max(1).to_string(),
+    )?;
     db::load_settings(conn)
 }
 

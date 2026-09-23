@@ -44,6 +44,16 @@ export type AppSettings = {
   nextPrioritySequence: number;
   setupCompleted: boolean;
   waitingLayout: "cards" | "table";
+  adsEnabled: boolean;
+  boardDurationSecs: number;
+};
+
+export type Ad = {
+  id: number;
+  filePath: string;
+  displayOrder: number;
+  durationSecs: number;
+  active: boolean;
 };
 
 export type BoardService = {

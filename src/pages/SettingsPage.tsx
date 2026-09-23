@@ -53,6 +53,8 @@ export function SettingsPage() {
   const [newBayName, setNewBayName] = useState("");
   const [localIps, setLocalIps] = useState<string[]>([]);
   const [mobilePort, setMobilePort] = useState(7878);
+  const [ads, setAds] = useState<import("@/types").Ad[]>([]);
+  const [adUploading, setAdUploading] = useState(false);
 
   // تُقفل الإعدادات من جديد عند مغادرة الصفحة، فيُطلب إدخال كلمة المرور في كل مرة تُفتح فيها.
   useEffect(() => lockSettings, [lockSettings]);
@@ -67,6 +69,7 @@ export function SettingsPage() {
         setDbPath(await api.dbPath());
         setLocalIps(await api.localIps().catch(() => []));
         setMobilePort(await api.mobilePort().catch(() => 7878));
+        setAds(await api.listAds().catch(() => []));
       } catch (error) {
         toast.error(String(error));
       }
@@ -480,6 +483,133 @@ export function SettingsPage() {
                 {t(locale, "refreshDisplay")}
               </Button>
             </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ── الإعلانات ── */}
+      <section className="space-y-4">
+        <SectionHeading>{t(locale, "sectionAds")}</SectionHeading>
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            <div className="flex items-center justify-between">
+              <Label>{t(locale, "adsEnabled")}</Label>
+              <Switch
+                checked={settings.adsEnabled}
+                onCheckedChange={(v) => patch("adsEnabled", v)}
+              />
+            </div>
+
+            {settings.adsEnabled && (
+              <>
+                <div className="flex items-center gap-3">
+                  <Label className="shrink-0">{t(locale, "boardDurationSecs")}</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={300}
+                    className="w-24 text-center"
+                    value={settings.boardDurationSecs}
+                    onChange={(e) => patch("boardDurationSecs", Math.max(1, Number(e.target.value)))}
+                  />
+                </div>
+
+                <Separator />
+
+                {/* قائمة الإعلانات */}
+                <div className="space-y-2">
+                  {ads.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">{t(locale, "noAds")}</p>
+                  ) : (
+                    ads.map((ad, i) => (
+                      <div key={ad.id} className="flex items-center gap-2 rounded-lg border p-2">
+                        <img
+                          src={convertFileSrc(ad.filePath)}
+                          alt=""
+                          className="h-12 w-20 rounded object-cover bg-slate-100"
+                        />
+                        <div className="flex flex-1 items-center gap-2 min-w-0">
+                          <Input
+                            type="number"
+                            min={1}
+                            max={600}
+                            className="w-20 text-center"
+                            value={ad.durationSecs}
+                            onChange={async (e) => {
+                              const dur = Math.max(1, Number(e.target.value));
+                              const updated = await api.updateAdDuration(ad.id, dur).catch(() => null);
+                              if (updated) setAds((prev) => prev.map((a) => (a.id === ad.id ? updated : a)));
+                            }}
+                          />
+                          <span className="text-xs text-muted-foreground">{t(locale, "adDurationSecsUnit")}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={i === 0}
+                            onClick={async () => {
+                              const newIds = ads.map((a) => a.id);
+                              [newIds[i - 1], newIds[i]] = [newIds[i], newIds[i - 1]];
+                              await api.reorderAds(newIds).catch(() => {});
+                              setAds(await api.listAds().catch(() => ads));
+                            }}
+                          >
+                            {t(locale, "moveUp")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={i === ads.length - 1}
+                            onClick={async () => {
+                              const newIds = ads.map((a) => a.id);
+                              [newIds[i], newIds[i + 1]] = [newIds[i + 1], newIds[i]];
+                              await api.reorderAds(newIds).catch(() => {});
+                              setAds(await api.listAds().catch(() => ads));
+                            }}
+                          >
+                            {t(locale, "moveDown")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={async () => {
+                              await api.removeAd(ad.id).catch((e) => toast.error(String(e)));
+                              setAds(await api.listAds().catch(() => []));
+                            }}
+                          >
+                            {t(locale, "removeAd")}
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <Button
+                  variant="outline"
+                  disabled={adUploading}
+                  onClick={async () => {
+                    const file = await open({
+                      multiple: false,
+                      filters: [{ name: "صور", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+                    }).catch(() => null);
+                    if (!file || typeof file !== "string") return;
+                    setAdUploading(true);
+                    try {
+                      await api.addAd(file, 10);
+                      setAds(await api.listAds());
+                    } catch (e) {
+                      toast.error(String(e));
+                    } finally {
+                      setAdUploading(false);
+                    }
+                  }}
+                >
+                  {adUploading ? "جاري الرفع..." : t(locale, "addAd")}
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       </section>

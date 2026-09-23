@@ -3,7 +3,7 @@ use crate::display;
 use crate::error::AppResult;
 use crate::garage;
 use crate::models::{
-    AppSettings, Bay, CreateTicketResult, DailyReport, GarageSnapshot, MonitorInfo, PrinterInfo, Ticket,
+    Ad, AppSettings, Bay, CreateTicketResult, DailyReport, GarageSnapshot, MonitorInfo, PrinterInfo, Ticket,
 };
 use crate::printing;
 use crate::state::AppState;
@@ -383,6 +383,90 @@ pub fn is_autostart_enabled(app: AppHandle) -> AppResult<bool> {
 #[tauri::command]
 pub fn db_path(state: State<AppState>) -> AppResult<String> {
     Ok(state.db_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn list_ads(state: State<AppState>) -> AppResult<Vec<Ad>> {
+    let conn = state.db.lock();
+    db::list_ads(&conn)
+}
+
+#[tauri::command]
+pub fn add_ad(app: AppHandle, source_path: String, duration_secs: i64) -> AppResult<Ad> {
+    let source = std::path::PathBuf::from(&source_path);
+    let ext = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
+    if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif") {
+        return Err(crate::error::AppError::msg(
+            "صيغة الصورة غير مدعومة (PNG, JPG, WEBP, GIF)",
+        ));
+    }
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| crate::error::AppError::msg(e.to_string()))?
+        .join("ads");
+    std::fs::create_dir_all(&dir)?;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let dest = dir.join(format!("ad-{nanos}.{ext}"));
+    std::fs::copy(&source, &dest)?;
+
+    let ad = {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock();
+        db::add_ad(&conn, &dest.to_string_lossy(), duration_secs)?
+    };
+    let _ = emit_ads_update(&app);
+    Ok(ad)
+}
+
+#[tauri::command]
+pub fn remove_ad(app: AppHandle, ad_id: i64) -> AppResult<()> {
+    let file_path = {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock();
+        db::remove_ad(&conn, ad_id)?
+    };
+    let _ = std::fs::remove_file(&file_path);
+    let _ = emit_ads_update(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_ad_duration(app: AppHandle, ad_id: i64, duration_secs: i64) -> AppResult<Ad> {
+    let ad = {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock();
+        db::update_ad_duration(&conn, ad_id, duration_secs)?
+    };
+    let _ = emit_ads_update(&app);
+    Ok(ad)
+}
+
+#[tauri::command]
+pub fn reorder_ads(app: AppHandle, ids: Vec<i64>) -> AppResult<()> {
+    {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock();
+        db::reorder_ads(&conn, &ids)?;
+    }
+    let _ = emit_ads_update(&app);
+    Ok(())
+}
+
+fn emit_ads_update(app: &AppHandle) -> AppResult<()> {
+    let state = app.state::<AppState>();
+    let conn = state.db.lock();
+    let ads = db::list_ads(&conn)?;
+    drop(conn);
+    let _ = app.emit("ads-updated", &ads);
+    Ok(())
 }
 
 #[tauri::command]

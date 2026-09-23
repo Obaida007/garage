@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  Ad,
   AppSettings,
   Bay,
   CreateTicketResult,
@@ -50,4 +51,11 @@ export const api = {
   dbPath: () => invoke<string>("db_path"),
   localIps: () => invoke<string[]>("get_local_ips"),
   mobilePort: () => invoke<number>("get_mobile_port"),
+  listAds: () => invoke<Ad[]>("list_ads"),
+  addAd: (sourcePath: string, durationSecs: number) =>
+    invoke<Ad>("add_ad", { sourcePath, durationSecs }),
+  removeAd: (adId: number) => invoke<void>("remove_ad", { adId }),
+  updateAdDuration: (adId: number, durationSecs: number) =>
+    invoke<Ad>("update_ad_duration", { adId, durationSecs }),
+  reorderAds: (ids: number[]) => invoke<void>("reorder_ads", { ids }),
 };

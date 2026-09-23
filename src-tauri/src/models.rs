@@ -119,6 +119,10 @@ pub struct AppSettings {
     pub setup_completed: bool,
     /// Waiting screen layout: "cards" or "table".
     pub waiting_layout: String,
+    /// Whether the ad slideshow is active on the waiting screen.
+    pub ads_enabled: bool,
+    /// How many seconds the waiting board is shown between ad rounds.
+    pub board_duration_secs: i64,
 }
 
 impl Default for AppSettings {
@@ -143,8 +147,20 @@ impl Default for AppSettings {
             next_priority_sequence: 1,
             setup_completed: false,
             waiting_layout: "cards".into(),
+            ads_enabled: false,
+            board_duration_secs: 8,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ad {
+    pub id: i64,
+    pub file_path: String,
+    pub display_order: i64,
+    pub duration_secs: i64,
+    pub active: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

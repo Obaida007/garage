@@ -83,6 +83,11 @@ pub fn run() {
             commands::db_path,
             commands::get_local_ips,
             commands::get_mobile_port,
+            commands::list_ads,
+            commands::add_ad,
+            commands::remove_ad,
+            commands::update_ad_duration,
+            commands::reorder_ads,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OS Tickets");
