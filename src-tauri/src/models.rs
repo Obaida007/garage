@@ -123,6 +123,10 @@ pub struct AppSettings {
     pub ads_enabled: bool,
     /// How many seconds the waiting board is shown between ad rounds.
     pub board_duration_secs: i64,
+    /// The word used when announcing a ticket call (e.g. "الزبون", "العميل").
+    pub call_word: String,
+    /// How many times the TTS announcement is repeated per call.
+    pub call_repeat_count: i64,
 }
 
 impl Default for AppSettings {
@@ -149,6 +153,8 @@ impl Default for AppSettings {
             waiting_layout: "cards".into(),
             ads_enabled: false,
             board_duration_secs: 8,
+            call_word: "الزبون".into(),
+            call_repeat_count: 1,
         }
     }
 }

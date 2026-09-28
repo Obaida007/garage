@@ -50,7 +50,7 @@ export const useGarageStore = create<GarageStore>((set, get) => ({
           ],
           waiting: [],
           inService: [],
-          settings: { garageName: "OS Tickets", printHeader: "", ticketPrefix: "", nextSequence: 5, printerName: "", paperWidthMm: 80, waitingMonitorId: "", waitingFullscreen: true, lastCalledTicketId: null, autoAssign: true, lastResetDate: "", logoPath: "", numberFormat: "en", settingsPassword: "", priorityEnabled: false, prioritySuffix: "A", nextPrioritySequence: 1, setupCompleted: true, waitingLayout: "cards", adsEnabled: false, boardDurationSecs: 8 },
+          settings: { garageName: "OS Tickets", printHeader: "", ticketPrefix: "", nextSequence: 5, printerName: "", paperWidthMm: 80, waitingMonitorId: "", waitingFullscreen: true, lastCalledTicketId: null, autoAssign: true, lastResetDate: "", logoPath: "", numberFormat: "en", settingsPassword: "", priorityEnabled: false, prioritySuffix: "A", nextPrioritySequence: 1, setupCompleted: true, waitingLayout: "cards", adsEnabled: false, boardDurationSecs: 8, callWord: "الزبون", callRepeatCount: 1 },
           waitingCount: 3,
           board: {
             garageName: "OS Tickets",
@@ -95,7 +95,13 @@ export const useGarageStore = create<GarageStore>((set, get) => ({
             newTicketId !== prevTicketId &&
             newBay.currentTicket
           ) {
-            speakTicketCall(newBay.currentTicket.ticketNumber, newBay.name);
+            const s = newSnapshot.settings;
+            speakTicketCall(
+              newBay.currentTicket.ticketNumber,
+              newBay.name,
+              s.callWord,
+              s.callRepeatCount,
+            );
           }
         }
       }

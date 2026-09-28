@@ -13,6 +13,8 @@ type Props = {
   logoPath?: string;
   layout?: "cards" | "table";
   onLayoutChange?: (layout: "cards" | "table") => void;
+  callWord?: string;
+  callRepeatCount?: number;
 };
 
 /** عدد الأعمدة الأنسب لعدد الحفر بحيث تملأ البطاقات الشاشة كاملة دون تمرير. */
@@ -163,6 +165,8 @@ export function WaitingBoardView({
   logoPath,
   layout: layoutProp = "cards",
   onLayoutChange,
+  callWord = "الزبون",
+  callRepeatCount = 1,
 }: Props) {
   const [layout, setLayout] = useState(layoutProp);
   useEffect(() => setLayout(layoutProp), [layoutProp]);
@@ -181,7 +185,7 @@ export function WaitingBoardView({
   function testAudio() {
     const calledBay = activeBays.find((bay) => bay.id === board.currentBay) ?? activeBays[0];
     const bayLabel = calledBay?.name || t(locale, "bay");
-    speakTicketCall(board.currentTicket ?? "001", bayLabel);
+    speakTicketCall(board.currentTicket ?? "001", bayLabel, callWord, callRepeatCount);
   }
 
   return (

@@ -46,6 +46,8 @@ export type AppSettings = {
   waitingLayout: "cards" | "table";
   adsEnabled: boolean;
   boardDurationSecs: number;
+  callWord: string;
+  callRepeatCount: number;
 };
 
 export type Ad = {

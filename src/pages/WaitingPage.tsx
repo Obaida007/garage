@@ -121,6 +121,8 @@ export function WaitingPage() {
           onLayoutChange={(waitingLayout) => {
             void api.saveSettings({ ...snapshot.settings, waitingLayout }).catch(() => {});
           }}
+          callWord={snapshot.settings.callWord}
+          callRepeatCount={snapshot.settings.callRepeatCount}
         />
       </div>
 

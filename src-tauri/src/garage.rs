@@ -615,6 +615,17 @@ pub fn update_settings(conn: &Connection, patch: &AppSettings) -> AppResult<AppS
         "board_duration_secs",
         &patch.board_duration_secs.max(1).to_string(),
     )?;
+    let call_word = patch.call_word.trim().to_string();
+    db::set_setting(
+        conn,
+        "call_word",
+        if call_word.is_empty() { "الزبون" } else { &call_word },
+    )?;
+    db::set_setting(
+        conn,
+        "call_repeat_count",
+        &patch.call_repeat_count.max(1).min(5).to_string(),
+    )?;
     db::load_settings(conn)
 }
 

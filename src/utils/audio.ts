@@ -18,27 +18,21 @@ export function playChime() {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
     const ctx = new AudioContextClass();
-    
-    // Play double chime (Ding-Dong)
     const now = ctx.currentTime;
-    
-    // First tone (Ding)
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = "sine";
-    osc1.frequency.setValueAtTime(659.25, now); // E5
+    osc1.frequency.setValueAtTime(659.25, now);
     gain1.gain.setValueAtTime(0.4, now);
     gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
     osc1.connect(gain1);
     gain1.connect(ctx.destination);
     osc1.start(now);
     osc1.stop(now + 0.3);
-
-    // Second tone (Dong)
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
     osc2.type = "sine";
-    osc2.frequency.setValueAtTime(880, now + 0.15); // A5
+    osc2.frequency.setValueAtTime(880, now + 0.15);
     gain2.gain.setValueAtTime(0.5, now + 0.15);
     gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
     osc2.connect(gain2);
@@ -50,38 +44,34 @@ export function playChime() {
   }
 }
 
-export function speakTicketCall(ticketNumber: string, bayLabel: string) {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-    console.warn("Speech synthesis is not supported in this environment");
-    return;
-  }
+export function speakTicketCall(
+  ticketNumber: string,
+  bayLabel: string,
+  callWord = "الزبون",
+  repeatCount = 1,
+) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
-  // Play chime first
   playChime();
-
-  // Cancel any ongoing speech
   window.speechSynthesis.cancel();
 
-  // Convert ticket number to integer so TTS reads it as a whole number (e.g. "071" → 71 → "واحد وسبعون")
   const ticketNumeric = parseInt(ticketNumber, 10);
   const ticketSpoken = isNaN(ticketNumeric) ? ticketNumber : ticketNumeric;
+  const times = Math.max(1, Math.min(5, repeatCount));
 
-  // Format text: "الزبون رقم [رقم الزبون] إلى [اسم الحفرة/النافذة]"
-  const text = `الزبون رقم ${ticketSpoken} إلى ${bayLabel}`;
-
-  // Delay speech slightly to let chime play cleanly
-  setTimeout(() => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "ar-SA";
-    utterance.rate = 0.85; // Natural clear Arabic speaking rate
-    utterance.pitch = 1.0;
-
-    const voices = window.speechSynthesis.getVoices();
-    const arVoice = cachedArabicVoice || voices.find((v) => v.lang.startsWith("ar"));
-    if (arVoice) {
-      utterance.voice = arVoice;
-    }
-
-    window.speechSynthesis.speak(utterance);
-  }, 350);
+  for (let i = 0; i < times; i++) {
+    const delay = 350 + i * 2500;
+    setTimeout(() => {
+      const utterance = new SpeechSynthesisUtterance(
+        callWord + " رقم " + String(ticketSpoken) + " إلى " + bayLabel,
+      );
+      utterance.lang = "ar-SA";
+      utterance.rate = 0.85;
+      utterance.pitch = 1.0;
+      const voices = window.speechSynthesis.getVoices();
+      const arVoice = cachedArabicVoice || voices.find((v) => v.lang.startsWith("ar"));
+      if (arVoice) utterance.voice = arVoice;
+      window.speechSynthesis.speak(utterance);
+    }, delay);
+  }
 }

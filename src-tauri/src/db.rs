@@ -198,6 +198,8 @@ fn seed_settings(conn: &Connection) -> AppResult<()> {
     set_if_missing(conn, "next_priority_sequence", &defaults.next_priority_sequence.to_string())?;
     set_if_missing(conn, "ads_enabled", "false")?;
     set_if_missing(conn, "board_duration_secs", &defaults.board_duration_secs.to_string())?;
+    set_if_missing(conn, "call_word", &defaults.call_word)?;
+    set_if_missing(conn, "call_repeat_count", &defaults.call_repeat_count.to_string())?;
     Ok(())
 }
 
@@ -297,6 +299,14 @@ pub fn load_settings(conn: &Connection) -> AppResult<AppSettings> {
     }
     if let Some(v) = get_setting(conn, "board_duration_secs")? {
         settings.board_duration_secs = v.parse().unwrap_or(8).max(1);
+    }
+    if let Some(v) = get_setting(conn, "call_word")? {
+        if !v.is_empty() {
+            settings.call_word = v;
+        }
+    }
+    if let Some(v) = get_setting(conn, "call_repeat_count")? {
+        settings.call_repeat_count = v.parse().unwrap_or(1).max(1).min(5);
     }
     Ok(settings)
 }

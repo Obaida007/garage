@@ -487,6 +487,38 @@ export function SettingsPage() {
         </Card>
       </section>
 
+      {/* ── الصوت والنداء ── */}
+      <section className="space-y-4">
+        <SectionHeading>{t(locale, "sectionAudio")}</SectionHeading>
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            <div className="flex items-center justify-between gap-4">
+              <Label>{t(locale, "callWordLabel")}</Label>
+              <select
+                value={settings.callWord}
+                onChange={(e) => patch("callWord", e.target.value)}
+                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {["الزبون", "البطاقة", "صاحب الرقم", "العميل", "المريض", "الطالب", "الرقم", "الشخص"].map((w) => (
+                  <option key={w} value={w}>{w}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <Label>{t(locale, "callRepeatCountLabel")}</Label>
+              <input
+                type="number"
+                min={1}
+                max={5}
+                value={settings.callRepeatCount}
+                onChange={(e) => patch("callRepeatCount", Math.min(5, Math.max(1, Number(e.target.value))))}
+                className="w-20 rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
       {/* ── الإعلانات ── */}
       <section className="space-y-4">
         <SectionHeading>{t(locale, "sectionAds")}</SectionHeading>
