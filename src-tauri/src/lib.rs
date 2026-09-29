@@ -1,4 +1,3 @@
-mod audio_duck;
 mod commands;
 mod db;
 mod display;
@@ -91,8 +90,6 @@ pub fn run() {
             commands::db_path,
             commands::get_local_ips,
             commands::get_mobile_port,
-            commands::duck_audio,
-            commands::unduck_audio,
             commands::list_ads,
             commands::add_ad,
             commands::remove_ad,
