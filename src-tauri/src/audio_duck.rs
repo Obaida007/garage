@@ -12,8 +12,7 @@ pub fn unduck(_our_pid: u32) {}
 
 #[cfg(windows)]
 mod imp {
-    use once_cell::sync::Lazy;
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
     use windows::core::Interface;
     use windows::Win32::Media::Audio::{
         eMultimedia, eRender, IAudioSessionControl, IAudioSessionControl2,
@@ -23,8 +22,11 @@ mod imp {
         CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
     };
 
-    // Saved (pid, original_volume) in session-enumeration order, for non-our-pid sessions.
-    static SAVED: Lazy<Mutex<Vec<(u32, f32)>>> = Lazy::new(|| Mutex::new(Vec::new()));
+    static SAVED: OnceLock<Mutex<Vec<(u32, f32)>>> = OnceLock::new();
+
+    fn saved() -> &'static Mutex<Vec<(u32, f32)>> {
+        SAVED.get_or_init(|| Mutex::new(Vec::new()))
+    }
 
     unsafe fn collect_other_sessions(
         skip_pid: u32,
@@ -68,7 +70,7 @@ mod imp {
                 Some(s) => s,
                 None => return,
             };
-            let mut saved = SAVED.lock().unwrap();
+            let mut saved = saved().lock().unwrap();
             saved.clear();
             for (pid, simple) in &sessions {
                 let vol = simple.GetMasterVolume().unwrap_or(1.0);
@@ -79,7 +81,7 @@ mod imp {
     }
 
     pub fn unduck(our_pid: u32) {
-        let saved: Vec<(u32, f32)> = std::mem::take(&mut *SAVED.lock().unwrap());
+        let saved: Vec<(u32, f32)> = std::mem::take(&mut *saved().lock().unwrap());
         if saved.is_empty() {
             return;
         }
