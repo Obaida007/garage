@@ -1,5 +1,4 @@
 // Audio announcement utility for Car Garage Ticket Calling
-import { api } from "@/services/tauri";
 
 let cachedArabicVoice: SpeechSynthesisVoice | null = null;
 
@@ -61,11 +60,6 @@ export function speakTicketCall(
   const times = Math.max(1, Math.min(5, repeatCount));
   const text = callWord + " رقم " + String(ticketSpoken) + " إلى " + bayLabel;
 
-  // Duck other apps before the first utterance
-  void api.duckAudio().catch(() => {});
-
-  let lastUtterance: SpeechSynthesisUtterance | null = null;
-
   for (let i = 0; i < times; i++) {
     const delay = 350 + i * 2500;
     setTimeout(() => {
@@ -76,21 +70,7 @@ export function speakTicketCall(
       const voices = window.speechSynthesis.getVoices();
       const arVoice = cachedArabicVoice || voices.find((v) => v.lang.startsWith("ar"));
       if (arVoice) utterance.voice = arVoice;
-
-      // Restore other apps after the last utterance finishes
-      if (i === times - 1) {
-        utterance.onend = () => void api.unduckAudio().catch(() => {});
-        utterance.onerror = () => void api.unduckAudio().catch(() => {});
-        lastUtterance = utterance;
-      }
-
       window.speechSynthesis.speak(utterance);
     }, delay);
   }
-
-  // Safety net: restore after a generous timeout even if onend never fires
-  const safetyMs = 350 + times * 2500 + 6000;
-  setTimeout(() => {
-    if (lastUtterance) void api.unduckAudio().catch(() => {});
-  }, safetyMs);
 }
