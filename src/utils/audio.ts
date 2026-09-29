@@ -71,7 +71,7 @@ export function speakTicketCall(
     setTimeout(() => {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = "ar-SA";
-      utterance.rate = 0.6;
+      utterance.rate = 0.65;
       utterance.pitch = 1.0;
       const voices = window.speechSynthesis.getVoices();
       const arVoice = cachedArabicVoice || voices.find((v) => v.lang.startsWith("ar"));
