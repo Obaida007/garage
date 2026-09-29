@@ -23,6 +23,7 @@ import { api } from "@/services/tauri";
 import { backupFileName } from "@/utils/format";
 import { t } from "@/utils/i18n";
 import { useGarageStore } from "@/stores/garageStore";
+import { MobileQrPanel } from "@/components/MobileQrPanel";
 import type { AppSettings, MonitorInfo, PrinterInfo } from "@/types";
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
@@ -51,8 +52,6 @@ export function SettingsPage() {
   const [bayNames, setBayNames] = useState<Record<number, string>>({});
   const [passwordInput, setPasswordInput] = useState("");
   const [newBayName, setNewBayName] = useState("");
-  const [localIps, setLocalIps] = useState<string[]>([]);
-  const [mobilePort, setMobilePort] = useState(7878);
   const [ads, setAds] = useState<import("@/types").Ad[]>([]);
   const [adUploading, setAdUploading] = useState(false);
 
@@ -67,8 +66,6 @@ export function SettingsPage() {
         setMonitors(await api.monitors());
         setAutostart(await api.isAutostart());
         setDbPath(await api.dbPath());
-        setLocalIps(await api.localIps().catch(() => []));
-        setMobilePort(await api.mobilePort().catch(() => 7878));
         setAds(await api.listAds().catch(() => []));
       } catch (error) {
         toast.error(String(error));
@@ -728,29 +725,9 @@ export function SettingsPage() {
       <section className="space-y-4">
         <SectionHeading>{t(locale, "sectionMobile")}</SectionHeading>
         <Card>
-          <CardContent className="space-y-3 pt-6">
-            <p className="text-sm text-muted-foreground">{t(locale, "mobileHint")}</p>
-            {localIps.length === 0 ? (
-              <p className="text-sm text-amber-600">{t(locale, "mobileNoIp")}</p>
-            ) : (
-              <div className="space-y-2">
-                {localIps.map((ip) => {
-                  const url = `http://${ip}:${mobilePort}`;
-                  return (
-                    <div key={ip} className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
-                      <span className="flex-1 select-all font-mono text-sm">{url}</span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => { void navigator.clipboard.writeText(url); toast.success(t(locale, "copied")); }}
-                      >
-                        {t(locale, "copy")}
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+          <CardContent className="pt-6">
+            <p className="mb-4 text-sm text-muted-foreground">{t(locale, "mobileHint")}</p>
+            <MobileQrPanel hint={t(locale, "mobileQrHint")} />
           </CardContent>
         </Card>
       </section>

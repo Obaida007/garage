@@ -478,3 +478,15 @@ pub fn get_local_ips() -> Vec<String> {
 pub fn get_mobile_port() -> u16 {
     crate::http_server::PORT
 }
+
+#[tauri::command]
+pub fn duck_audio() {
+    let our_pid = std::process::id();
+    tokio::task::block_in_place(|| crate::audio_duck::duck(our_pid));
+}
+
+#[tauri::command]
+pub fn unduck_audio() {
+    let our_pid = std::process::id();
+    tokio::task::block_in_place(|| crate::audio_duck::unduck(our_pid));
+}

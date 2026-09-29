@@ -1,8 +1,17 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api } from "@/services/tauri";
 import { speakTicketCall } from "@/utils/audio";
 import type { GarageSnapshot, Locale } from "@/types";
+
+// Only the main window should announce — the waiting window also listens to garage-updated.
+let isMainWindow = true;
+try {
+  isMainWindow = getCurrentWindow().label === "main";
+} catch {
+  // demo / plain browser — treat as main
+}
 
 type GarageStore = {
   locale: Locale;
@@ -93,7 +102,8 @@ export const useGarageStore = create<GarageStore>((set, get) => ({
           if (
             newTicketId !== null &&
             newTicketId !== prevTicketId &&
-            newBay.currentTicket
+            newBay.currentTicket &&
+            isMainWindow
           ) {
             const s = newSnapshot.settings;
             speakTicketCall(

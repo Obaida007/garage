@@ -58,4 +58,6 @@ export const api = {
   updateAdDuration: (adId: number, durationSecs: number) =>
     invoke<Ad>("update_ad_duration", { adId, durationSecs }),
   reorderAds: (ids: number[]) => invoke<void>("reorder_ads", { ids }),
+  duckAudio: () => invoke<void>("duck_audio"),
+  unduckAudio: () => invoke<void>("unduck_audio"),
 };

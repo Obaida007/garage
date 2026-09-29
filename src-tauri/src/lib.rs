@@ -1,3 +1,4 @@
+mod audio_duck;
 mod commands;
 mod db;
 mod display;
@@ -46,6 +47,13 @@ pub fn run() {
             http_server::spawn(app.handle().clone());
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if window.label() == "main" {
+                    window.app_handle().exit(0);
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::get_snapshot,
             commands::create_ticket,
@@ -83,6 +91,8 @@ pub fn run() {
             commands::db_path,
             commands::get_local_ips,
             commands::get_mobile_port,
+            commands::duck_audio,
+            commands::unduck_audio,
             commands::list_ads,
             commands::add_ad,
             commands::remove_ad,

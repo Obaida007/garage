@@ -4,6 +4,7 @@ import { AlertTriangle, Zap } from "lucide-react";
 import { BayGrid } from "@/features/cashier/BayGrid";
 import { QueuePanel } from "@/features/cashier/QueuePanel";
 import { RecoveryDialog } from "@/features/cashier/RecoveryDialog";
+import { MobileQrPanel } from "@/components/MobileQrPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -212,7 +213,8 @@ export function CashierPage() {
             onToggleOutOfService={(id, val) => void toggleOutOfService(id, val)}
           />
         </div>
-        <div className="w-full shrink-0 lg:w-[380px]">
+        <div className="flex w-full shrink-0 flex-col gap-4 lg:w-[380px]">
+          <MobileQrPanel />
           <QueuePanel
             waiting={snapshot.waiting}
             locale={locale}
