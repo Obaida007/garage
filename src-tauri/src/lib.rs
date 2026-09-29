@@ -1,4 +1,3 @@
-mod audio_restore;
 mod commands;
 mod db;
 mod display;
@@ -42,7 +41,6 @@ pub fn run() {
                 db_path,
                 mobile_token: Mutex::new(None),
             });
-            audio_restore::restore_our_volume();
             let _ = display::ensure_waiting_window(app.handle());
             display::start_monitor_watch(app.handle().clone());
             http_server::spawn(app.handle().clone());
