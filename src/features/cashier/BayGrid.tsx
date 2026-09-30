@@ -13,6 +13,7 @@ type Props = {
   onComplete: (bayId: number) => void;
   onCallHere: (bayId: number) => void;
   onCancel: (ticketId: number) => void;
+  onReturn: (ticketId: number) => void;
   onToggleOutOfService: (bayId: number, outOfService: boolean) => void;
 };
 
@@ -52,6 +53,7 @@ export function BayGrid({
   onComplete,
   onCallHere,
   onCancel,
+  onReturn,
   onToggleOutOfService,
 }: Props) {
   return (
@@ -125,6 +127,16 @@ export function BayGrid({
                     onClick={() => onComplete(bay.id)}
                   >
                     {t(locale, "complete")}
+                  </Button>
+                  <Button
+                    className="w-full font-bold"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      bay.currentTicket && onReturn(bay.currentTicket.id)
+                    }
+                  >
+                    {t(locale, "returnQueue")}
                   </Button>
                   <Button
                     className="w-full font-bold"

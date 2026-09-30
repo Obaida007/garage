@@ -199,48 +199,6 @@ export function CashierPage() {
         </div>
       )}
 
-      {/* ── Recovery banner (inline, no blocking dialog) ── */}
-      {snapshot.needsRecovery && snapshot.inService.length > 0 && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3">
-          <p className="font-bold text-amber-900">{t(locale, "recoveryTitle")}</p>
-          {snapshot.inService.map((ticket) => (
-            <div key={ticket.id} className="flex flex-wrap items-center gap-3 rounded-lg border bg-white px-4 py-3">
-              <span className="text-xl font-black flex-1">
-                {ticket.ticketNumber} —{" "}
-                {snapshot.bays.find((b) => b.id === ticket.bayId)?.name ||
-                  `${t(locale, "bay")} ${ticket.bayId}`}
-              </span>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  onClick={async () => {
-                    try { await api.completeTicket(ticket.id); } catch (e) { toast.error(String(e)); }
-                  }}
-                >
-                  {t(locale, "complete")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={async () => {
-                    try { await api.returnToQueue(ticket.id); } catch (e) { toast.error(String(e)); }
-                  }}
-                >
-                  {t(locale, "returnQueue")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => setConfirm({ type: "cancel", id: ticket.id })}
-                >
-                  {t(locale, "cancel")}
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
       <div className="flex gap-4 items-start flex-wrap lg:flex-nowrap">
         <div className="min-w-0 flex-1">
           <BayGrid
@@ -250,6 +208,9 @@ export function CashierPage() {
             onComplete={(id) => setConfirm({ type: "complete", id })}
             onCallHere={(id) => void callNext(id)}
             onCancel={(id) => setConfirm({ type: "cancel", id })}
+            onReturn={async (id) => {
+              try { await api.returnToQueue(id); } catch (e) { toast.error(String(e)); }
+            }}
             onToggleOutOfService={(id, val) => void toggleOutOfService(id, val)}
           />
         </div>
