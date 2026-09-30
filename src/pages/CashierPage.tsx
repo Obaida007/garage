@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import { AlertTriangle, Zap } from "lucide-react";
 import { BayGrid } from "@/features/cashier/BayGrid";
 import { QueuePanel } from "@/features/cashier/QueuePanel";
-import { RecoveryDialog } from "@/features/cashier/RecoveryDialog";
 import { MobileQrPanel } from "@/components/MobileQrPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -26,7 +25,6 @@ import { t } from "@/utils/i18n";
 export function CashierPage() {
   const snapshot = useGarageStore((s) => s.snapshot);
   const locale = useGarageStore((s) => s.locale);
-  const [recoveryOpen, setRecoveryOpen] = useState(true);
   const [assignTicketId, setAssignTicketId] = useState<number | null>(null);
   const [confirm, setConfirm] = useState<{
     type: "cancel" | "complete";
@@ -201,6 +199,48 @@ export function CashierPage() {
         </div>
       )}
 
+      {/* ── Recovery banner (inline, no blocking dialog) ── */}
+      {snapshot.needsRecovery && snapshot.inService.length > 0 && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3">
+          <p className="font-bold text-amber-900">{t(locale, "recoveryTitle")}</p>
+          {snapshot.inService.map((ticket) => (
+            <div key={ticket.id} className="flex flex-wrap items-center gap-3 rounded-lg border bg-white px-4 py-3">
+              <span className="text-xl font-black flex-1">
+                {ticket.ticketNumber} —{" "}
+                {snapshot.bays.find((b) => b.id === ticket.bayId)?.name ||
+                  `${t(locale, "bay")} ${ticket.bayId}`}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    try { await api.completeTicket(ticket.id); } catch (e) { toast.error(String(e)); }
+                  }}
+                >
+                  {t(locale, "complete")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={async () => {
+                    try { await api.returnToQueue(ticket.id); } catch (e) { toast.error(String(e)); }
+                  }}
+                >
+                  {t(locale, "returnQueue")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setConfirm({ type: "cancel", id: ticket.id })}
+                >
+                  {t(locale, "cancel")}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex gap-4 items-start flex-wrap lg:flex-nowrap">
         <div className="min-w-0 flex-1">
           <BayGrid
@@ -231,29 +271,6 @@ export function CashierPage() {
           />
         </div>
       </div>
-
-      <RecoveryDialog
-        open={recoveryOpen && snapshot.needsRecovery}
-        tickets={snapshot.inService}
-        bays={snapshot.bays}
-        locale={locale}
-        onComplete={async (id) => {
-          try {
-            await api.completeTicket(id);
-          } catch (error) {
-            toast.error(String(error));
-          }
-        }}
-        onReturn={async (id) => {
-          try {
-            await api.returnToQueue(id);
-          } catch (error) {
-            toast.error(String(error));
-          }
-        }}
-        onCancel={(id) => setConfirm({ type: "cancel", id })}
-        onLater={() => setRecoveryOpen(false)}
-      />
 
       {/* ── Manual assign from queue dialog ── */}
       <Dialog
